@@ -106,7 +106,7 @@ export async function getControlOperativo(): Promise<ControlOperativoRow[]> {
         mina: r.mina ?? null,
         refrigerio: r.refrigerio ?? null,
         restaurante: text(r.restaurante),
-        almuerzo: text(r.tipo_almuerzo),
+        almuerzo: text(p?.tipo_almuerzo),
         total,
         abono,
         medio_abono: text(r.metodo_pago_abono),
