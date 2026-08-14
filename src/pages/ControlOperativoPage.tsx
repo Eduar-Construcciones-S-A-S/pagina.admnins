@@ -20,6 +20,7 @@ import "../styles/control-operativo.css";
 const money = (value: number) => `$${Number(value || 0).toLocaleString("es-CO")}`;
 const yesNo = (value: boolean | null) => (value ? "SI" : "NO");
 const normalizeHour = (value: string) => value ? value.slice(0, 5) : "—";
+const normalizePhone = (value: string) => String(value || "").replace(/\D/g, "");
 const esc = (value: unknown) => String(value ?? "")
   .replaceAll("&", "&amp;")
   .replaceAll("<", "&lt;")
@@ -129,12 +130,16 @@ export default function ControlOperativoPage() {
       });
 
       if (editing.id_participante) {
+        const participantPhone = normalizePhone(editing.contacto) && normalizePhone(editing.contacto) !== normalizePhone(editing.contacto_cliente)
+          ? editing.contacto.trim()
+          : null;
+
         await updateControlParticipante(editing.id_participante, {
           nombre: editing.nombre || null,
           edad: editing.edad,
           nacionalidad: editing.nacionalidad || null,
           numero_documento: editing.documento || null,
-          telefono_participante: editing.contacto || null,
+          telefono_participante: participantPhone,
         });
       }
 
