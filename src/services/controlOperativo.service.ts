@@ -10,6 +10,7 @@ export type ControlOperativoRow = {
   id_participante: number | null;
   reserva_codigo: string;
   id_plan: number | null;
+  id_hora: number | null;
   plan: string;
   fecha: string;
   hora: string;
@@ -87,6 +88,7 @@ export async function getControlOperativo(): Promise<ControlOperativoRow[]> {
         id_participante: p ? Number(p.id_participante) : null,
         reserva_codigo: text(r.codigo_reserva || r.codigo || r.id_reserva),
         id_plan: r.id_plan == null ? null : Number(r.id_plan),
+        id_hora: r.id_hora == null ? null : Number(r.id_hora),
         plan: text(plan?.nombre_plan),
         fecha: text(fecha?.fecha),
         hora: text(hora?.hora),
