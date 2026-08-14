@@ -24,7 +24,7 @@ export type ControlOperativoRow = {
   cantidad: number | null;
   mina: boolean | null;
   refrigerio: boolean | null;
-  restaurante: boolean | null;
+  restaurante: string;
   almuerzo: string;
   total: number;
   abono: number;
@@ -86,7 +86,7 @@ export async function getControlOperativo(): Promise<ControlOperativoRow[]> {
       rows.push({
         id_reserva: Number(r.id_reserva),
         id_participante: p ? Number(p.id_participante) : null,
-        reserva_codigo: text(r.codigo_reserva || r.codigo || r.id_reserva),
+        reserva_codigo: String(r.id_reserva),
         id_plan: r.id_plan == null ? null : Number(r.id_plan),
         id_hora: r.id_hora == null ? null : Number(r.id_hora),
         plan: text(plan?.nombre_plan),
@@ -102,7 +102,7 @@ export async function getControlOperativo(): Promise<ControlOperativoRow[]> {
         cantidad: r.cantidad_personas == null ? null : Number(r.cantidad_personas),
         mina: r.mina ?? null,
         refrigerio: r.refrigerio ?? null,
-        restaurante: r.restaurante ?? null,
+        restaurante: text(r.restaurante),
         almuerzo: text(r.tipo_almuerzo),
         total,
         abono,
