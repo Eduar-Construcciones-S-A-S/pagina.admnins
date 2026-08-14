@@ -182,18 +182,29 @@ export default function ControlOperativoPage() {
           </tr></thead>
           <tbody>
             {!filtered.length ? <tr><td colSpan={21} className="op-empty">No hay registros para los filtros seleccionados.</td></tr> : filtered.map((r, index) => {
-              const groupStart = agrupar && previousReserva !== r.id_reserva;
+              const isFirstOfReservation = !agrupar || previousReserva !== r.id_reserva;
+              const groupStart = agrupar && isFirstOfReservation;
               previousReserva = r.id_reserva;
+              const reservationCell = (content: React.ReactNode) => isFirstOfReservation ? content : null;
+
               return <tr key={`${r.id_reserva}-${r.id_participante ?? index}`} className={groupStart ? "group-start" : ""}>
-                <td><div className="op-reserva"><strong>{r.reserva_codigo}</strong><span className={r.aprobado ? "state ok" : "state pending"}>{r.aprobado ? "Aprobada" : "Pendiente"}</span></div></td>
-                <td className="plan-cell">{r.plan || "—"}</td><td>{r.nombre || "—"}</td><td>{r.edad ?? "—"}</td><td>{r.nacionalidad || "—"}</td>
-                <td>{r.documento || "—"}</td><td>{r.contacto || "—"}</td><td className="center">{r.cantidad ?? "—"}</td><td className="center">{normalizeHour(r.hora)}</td>
-                <td><button className={`yn ${r.mina ? "yes" : "no"}`} onClick={() => quickToggle(r, "mina")}>{yesNo(r.mina)}</button></td>
-                <td><button className={`yn ${r.refrigerio ? "yes" : "no"}`} onClick={() => quickToggle(r, "refrigerio")}>{yesNo(r.refrigerio)}</button></td>
-                <td><button className={`yn ${r.restaurante ? "yes" : "no"}`} onClick={() => quickToggle(r, "restaurante")}>{yesNo(r.restaurante)}</button></td>
-                <td>{r.almuerzo || "—"}</td><td className="money">{money(r.total)}</td><td className="money">{money(r.abono)}</td><td>{r.medio_abono || "—"}</td>
-                <td className="money">{money(r.pago_saldo)}</td><td>{r.medio_saldo || "—"}</td><td className={`money ${r.saldo_pendiente > 0 ? "pending-money" : "paid-money"}`}>{money(r.saldo_pendiente)}</td>
-                <td className="obs-cell" title={r.observacion}>{r.observacion || "—"}</td>
+                <td>{reservationCell(<div className="op-reserva"><strong>{r.reserva_codigo}</strong><span className="state ok">Aprobada</span></div>)}</td>
+                <td className="plan-cell">{reservationCell(r.plan || "—")}</td>
+                <td>{r.nombre || "—"}</td><td>{r.edad ?? "—"}</td><td>{r.nacionalidad || "—"}</td>
+                <td>{r.documento || "—"}</td><td>{r.contacto || "—"}</td>
+                <td className="center">{reservationCell(r.cantidad ?? "—")}</td>
+                <td className="center">{reservationCell(normalizeHour(r.hora))}</td>
+                <td>{reservationCell(<button className={`yn ${r.mina ? "yes" : "no"}`} onClick={() => quickToggle(r, "mina")}>{yesNo(r.mina)}</button>)}</td>
+                <td>{reservationCell(<button className={`yn ${r.refrigerio ? "yes" : "no"}`} onClick={() => quickToggle(r, "refrigerio")}>{yesNo(r.refrigerio)}</button>)}</td>
+                <td>{reservationCell(<button className={`yn ${r.restaurante ? "yes" : "no"}`} onClick={() => quickToggle(r, "restaurante")}>{yesNo(r.restaurante)}</button>)}</td>
+                <td>{reservationCell(r.almuerzo || "—")}</td>
+                <td className="money">{reservationCell(money(r.total))}</td>
+                <td className="money">{reservationCell(money(r.abono))}</td>
+                <td>{reservationCell(r.medio_abono || "—")}</td>
+                <td className="money">{reservationCell(money(r.pago_saldo))}</td>
+                <td>{reservationCell(r.medio_saldo || "—")}</td>
+                <td className={`money ${r.saldo_pendiente > 0 ? "pending-money" : "paid-money"}`}>{reservationCell(money(r.saldo_pendiente))}</td>
+                <td className="obs-cell" title={isFirstOfReservation ? r.observacion : ""}>{reservationCell(r.observacion || "—")}</td>
                 <td><div className="op-actions"><button title="Ver detalle" onClick={() => setSelected(r)}><Eye size={15} /></button><button title="Editar" onClick={() => setEditing({ ...r })}><Pencil size={15} /></button></div></td>
               </tr>;
             })}
