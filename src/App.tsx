@@ -1,5 +1,4 @@
 // App.tsx — Rutas principales
-// Agrega la ruta index (/app) que carga OverviewPage
 
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Login from "./pages/Login";
@@ -10,6 +9,7 @@ import ReservasPage from "./pages/ReservasPage";
 import PlanesPage from "./pages/PlanesPage";
 import ClientesPage from "./pages/ClientesPage";
 import ParticipantesPage from "./pages/ParticipantesPage";
+import ControlOperativoPage from "./pages/ControlOperativoPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 import "./styles/dashboard.css";
@@ -30,9 +30,10 @@ export default function App() {
           }
         >
           <Route index element={<OverviewPage />} />
-          <Route path="reservas"     element={<ReservasPage />} />
-          <Route path="planes"       element={<PlanesPage />} />
-          <Route path="clientes"     element={<ClientesPage />} />
+          <Route path="reservas" element={<ReservasPage />} />
+          <Route path="control-operativo" element={<ControlOperativoPage />} />
+          <Route path="planes" element={<PlanesPage />} />
+          <Route path="clientes" element={<ClientesPage />} />
           <Route path="participantes" element={<ParticipantesPage />} />
         </Route>
 
