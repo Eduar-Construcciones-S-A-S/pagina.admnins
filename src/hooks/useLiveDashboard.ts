@@ -1,18 +1,9 @@
 /**
  * useLiveDashboard
  *
- * Combina dos estrategias para mantener el dashboard siempre fresco:
- *
- * 1. POLLING — recarga todos los datos cada `intervalMs` ms (default 30 s).
- *    Funciona aunque Realtime esté desactivado en el proyecto de Supabase.
- *
- * 2. SUPABASE REALTIME — suscripción a cambios en las tablas principales.
- *    Cuando llega un evento INSERT / UPDATE / DELETE dispara un refetch
- *    inmediato, sin esperar al siguiente tick del polling.
- *
- * Uso:
- *   const { reservas, planes, clientes, participantes, loading, lastUpdated } =
- *     useLiveDashboard();
+ * Mantiene el dashboard actualizado mediante polling y Supabase Realtime.
+ * Cada consulta se resuelve de forma independiente para que un fallo puntual
+ * en una tabla no deje todo el resumen en cero.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -27,11 +18,11 @@ import type { EtapaConversacionValue } from "../lib/etapas";
 
 export type { EtapaConversacionValue };
 
-/* ── tipos re-exportados para que OverviewPage los importe de aquí ── */
 export interface Reserva {
   id_reserva: number;
   telefono_cliente?: string;
   id_plan?: number;
+  cantidad_personas?: number;
   fecha_solicitud?: string;
   fecha_aprobacion?: string;
   aprobado?: boolean;
@@ -61,18 +52,21 @@ export interface Participante {
   id_participante: number;
   nombre?: string;
   edad?: number;
+  telefono_cliente?: string;
+  telefono_participante?: string;
+  tipo_documento?: string;
+  numero_documento?: string;
+  correo?: string;
+  nacionalidad?: string;
   id_reserva?: number;
   id_plan?: number;
   nombre_plan?: string;
 }
 
-/* ── intervalo de polling por defecto: 30 segundos ── */
 const DEFAULT_INTERVAL_MS = 30_000;
 
 interface UseLiveDashboardOptions {
-  /** Intervalo de polling en ms. Default: 30000 (30 s). */
   intervalMs?: number;
-  /** Deshabilitar Supabase Realtime (solo polling). */
   disableRealtime?: boolean;
 }
 
@@ -81,13 +75,9 @@ interface UseLiveDashboardResult {
   planes: Plan[];
   clientes: Cliente[];
   participantes: Participante[];
-  /** true solo durante la carga inicial, no en refetches silenciosos */
   loading: boolean;
-  /** true mientras un refetch silencioso está en curso */
   refreshing: boolean;
-  /** fecha/hora del último fetch exitoso */
   lastUpdated: Date | null;
-  /** fuerza un refetch manual */
   refresh: () => void;
 }
 
@@ -95,29 +85,29 @@ export function useLiveDashboard({
   intervalMs = DEFAULT_INTERVAL_MS,
   disableRealtime = false,
 }: UseLiveDashboardOptions = {}): UseLiveDashboardResult {
-  const [reservas,      setReservas]      = useState<Reserva[]>([]);
-  const [planes,        setPlanes]        = useState<Plan[]>([]);
-  const [clientes,      setClientes]      = useState<Cliente[]>([]);
+  const [reservas, setReservas] = useState<Reserva[]>([]);
+  const [planes, setPlanes] = useState<Plan[]>([]);
+  const [clientes, setClientes] = useState<Cliente[]>([]);
   const [participantes, setParticipantes] = useState<Participante[]>([]);
-  const [loading,       setLoading]       = useState(true);
-  const [refreshing,    setRefreshing]    = useState(false);
-  const [lastUpdated,   setLastUpdated]   = useState<Date | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  // Ref para evitar actualizar estado si el componente ya se desmontó
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
-    return () => { mountedRef.current = false; };
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
-  // ── fetch central ────────────────────────────────────────────
   const fetchAll = useCallback(async (silent = false) => {
     if (!mountedRef.current) return;
 
     if (silent) setRefreshing(true);
 
     try {
-      const [r, pl, cl, pa] = await Promise.all([
+      const results = await Promise.allSettled([
         getReservas(),
         getPlanes(),
         getClientes(),
@@ -126,13 +116,38 @@ export function useLiveDashboard({
 
       if (!mountedRef.current) return;
 
-      setReservas(r      as Reserva[]);
-      setPlanes(pl       as Plan[]);
-      setClientes(cl     as Cliente[]);
-      setParticipantes(pa as Participante[]);
-      setLastUpdated(new Date());
-    } catch (err) {
-      console.error("[useLiveDashboard] fetch error:", err);
+      const [reservasResult, planesResult, clientesResult, participantesResult] = results;
+      let successfulFetch = false;
+
+      if (reservasResult.status === "fulfilled") {
+        setReservas(reservasResult.value as Reserva[]);
+        successfulFetch = true;
+      } else {
+        console.error("[Dashboard] Error cargando reservas:", reservasResult.reason);
+      }
+
+      if (planesResult.status === "fulfilled") {
+        setPlanes(planesResult.value as Plan[]);
+        successfulFetch = true;
+      } else {
+        console.error("[Dashboard] Error cargando planes:", planesResult.reason);
+      }
+
+      if (clientesResult.status === "fulfilled") {
+        setClientes(clientesResult.value as Cliente[]);
+        successfulFetch = true;
+      } else {
+        console.error("[Dashboard] Error cargando clientes:", clientesResult.reason);
+      }
+
+      if (participantesResult.status === "fulfilled") {
+        setParticipantes(participantesResult.value as Participante[]);
+        successfulFetch = true;
+      } else {
+        console.error("[Dashboard] Error cargando participantes:", participantesResult.reason);
+      }
+
+      if (successfulFetch) setLastUpdated(new Date());
     } finally {
       if (mountedRef.current) {
         setLoading(false);
@@ -141,12 +156,10 @@ export function useLiveDashboard({
     }
   }, []);
 
-  // ── carga inicial ─────────────────────────────────────────────
   useEffect(() => {
     fetchAll(false);
   }, [fetchAll]);
 
-  // ── polling ───────────────────────────────────────────────────
   useEffect(() => {
     if (!intervalMs || intervalMs <= 0) return;
 
@@ -154,12 +167,10 @@ export function useLiveDashboard({
     return () => clearInterval(id);
   }, [fetchAll, intervalMs]);
 
-  // ── supabase realtime ─────────────────────────────────────────
   useEffect(() => {
     if (disableRealtime || !supabase) return;
     const client = supabase;
 
-    // Un canal único con una suscripción por tabla
     const channel = client
       .channel("dashboard-live")
       .on(
