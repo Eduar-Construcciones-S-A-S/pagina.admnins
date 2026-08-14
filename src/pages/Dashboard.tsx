@@ -92,6 +92,7 @@ function Dashboard() {
   }, []);
 
   const linkClass = ({ isActive }: { isActive: boolean }) => ["dash-nav-link", isActive ? "active" : ""].join(" ");
+  const isControlOperativo = location.pathname === "/app/control-operativo";
 
   return (
     <div className="dash-root">
@@ -121,7 +122,12 @@ function Dashboard() {
         <button onClick={handleLogout} className="drawer-logout"><LogOut size={16} />Cerrar sesión</button>
       </div>
 
-      <main className="dash-main"><Outlet /></main>
+      <main
+        className="dash-main"
+        style={isControlOperativo ? { maxWidth: "none", width: "100%", padding: "12px 12px 24px" } : undefined}
+      >
+        <Outlet />
+      </main>
     </div>
   );
 }

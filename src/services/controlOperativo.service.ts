@@ -42,7 +42,7 @@ const num = (value: unknown) => {
 
 export async function getControlOperativo(): Promise<ControlOperativoRow[]> {
   const [reservasRes, participantesRes, planesRes, fechasRes, horasRes] = await Promise.all([
-    client().from("reserva").select("*").order("id_reserva", { ascending: false }),
+    client().from("reserva").select("*").eq("aprobado", true).order("id_reserva", { ascending: false }),
     client().from("participante").select("*").order("id_participante", { ascending: true }),
     client().from("plan").select("*"),
     client().from("plan_fechas").select("*"),
