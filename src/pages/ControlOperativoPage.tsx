@@ -55,7 +55,6 @@ export default function ControlOperativoPage() {
   const [fecha, setFecha] = useState("");
   const [plan, setPlan] = useState("");
   const [hora, setHora] = useState("");
-  const [estado, setEstado] = useState("");
   const [agrupar, setAgrupar] = useState(true);
   const [selected, setSelected] = useState<ControlOperativoRow | null>(null);
   const [editing, setEditing] = useState<ControlOperativoRow | null>(null);
@@ -79,6 +78,8 @@ export default function ControlOperativoPage() {
   const planes = useMemo(() => [...new Set(rows.map(r => r.plan).filter(Boolean))].sort(), [rows]);
   const fechas = useMemo(() => [...new Set(rows.map(r => r.fecha).filter(Boolean))].sort(), [rows]);
   const horas = useMemo(() => [...new Set(rows.map(r => r.hora).filter(Boolean))].sort(), [rows]);
+  const planOptions = useMemo(() => [...new Map(rows.filter(r => r.id_plan != null).map(r => [r.id_plan as number, r.plan])).entries()], [rows]);
+  const hourOptions = useMemo(() => [...new Map(rows.filter(r => r.id_hora != null).map(r => [r.id_hora as number, r.hora])).entries()], [rows]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -86,10 +87,8 @@ export default function ControlOperativoPage() {
       if (fecha && r.fecha !== fecha) return false;
       if (plan && r.plan !== plan) return false;
       if (hora && r.hora !== hora) return false;
-      if (estado === "aprobada" && r.aprobado !== true) return false;
-      if (estado === "pendiente" && r.aprobado === true) return false;
       if (q) {
-        const haystack = [r.reserva_codigo, r.plan, r.nombre, r.documento, r.contacto, r.nacionalidad, r.observacion].join(" ").toLowerCase();
+        const haystack = [r.reserva_codigo, r.plan, r.nombre, r.documento, r.contacto, r.nacionalidad, r.observacion, r.almuerzo].join(" ").toLowerCase();
         if (!haystack.includes(q)) return false;
       }
       return true;
@@ -97,16 +96,16 @@ export default function ControlOperativoPage() {
     return [...result].sort((a, b) => agrupar
       ? (b.id_reserva - a.id_reserva) || ((a.id_participante ?? 0) - (b.id_participante ?? 0))
       : (b.id_participante ?? 0) - (a.id_participante ?? 0));
-  }, [rows, search, fecha, plan, hora, estado, agrupar]);
-
-  const clearFilters = () => { setSearch(""); setFecha(""); setPlan(""); setHora(""); setEstado(""); };
+  }, [rows, search, fecha, plan, hora, agrupar]);
 
   const quickToggle = async (row: ControlOperativoRow, field: "mina" | "refrigerio" | "restaurante") => {
     const value = !row[field];
     try {
       await updateControlReserva(row.id_reserva, { [field]: value });
       setRows(prev => prev.map(r => r.id_reserva === row.id_reserva ? { ...r, [field]: value } : r));
-    } catch (e: any) { setError(e?.message || "No fue posible guardar el cambio."); }
+    } catch (e: any) {
+      setError(e?.message || "No fue posible guardar el cambio.");
+    }
   };
 
   const saveEdit = async () => {
@@ -115,6 +114,9 @@ export default function ControlOperativoPage() {
     setError(null);
     try {
       await updateControlReserva(editing.id_reserva, {
+        codigo_reserva: editing.reserva_codigo || null,
+        id_plan: editing.id_plan,
+        id_hora: editing.id_hora,
         mina: editing.mina,
         refrigerio: editing.refrigerio,
         restaurante: editing.restaurante,
@@ -126,6 +128,7 @@ export default function ControlOperativoPage() {
         metodo_pago_saldo: editing.medio_saldo || null,
         observacion: editing.observacion || null,
       });
+
       if (editing.id_participante) {
         await updateControlParticipante(editing.id_participante, {
           nombre: editing.nombre || null,
@@ -135,16 +138,20 @@ export default function ControlOperativoPage() {
           telefono_participante: editing.contacto || null,
         });
       }
+
       setEditing(null);
       await load(true);
     } catch (e: any) {
       setError(e?.message || "No fue posible guardar los cambios.");
-    } finally { setSaving(false); }
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (loading) return <div className="op-loading"><div className="spinner" /><span>Cargando control operativo…</span></div>;
 
   let previousReserva: number | null = null;
+
   return (
     <div className="op-page">
       <div className="op-head">
@@ -162,9 +169,8 @@ export default function ControlOperativoPage() {
         <label><span>Fecha</span><select value={fecha} onChange={e => setFecha(e.target.value)}><option value="">Todas</option>{fechas.map(v => <option key={v}>{v}</option>)}</select></label>
         <label><span>Plan</span><select value={plan} onChange={e => setPlan(e.target.value)}><option value="">Todos</option>{planes.map(v => <option key={v}>{v}</option>)}</select></label>
         <label><span>Horario</span><select value={hora} onChange={e => setHora(e.target.value)}><option value="">Todos</option>{horas.map(v => <option key={v} value={v}>{normalizeHour(v)}</option>)}</select></label>
-        <label><span>Estado</span><select value={estado} onChange={e => setEstado(e.target.value)}><option value="">Todos</option><option value="aprobada">Aprobada</option><option value="pendiente">Pendiente</option></select></label>
         <label className="op-group-toggle"><input type="checkbox" checked={agrupar} onChange={e => setAgrupar(e.target.checked)} /><span>Agrupar por reserva</span></label>
-        <button className="op-clear" onClick={clearFilters}><X size={14} /> Limpiar</button>
+        <button className="op-clear" onClick={() => { setSearch(""); setFecha(""); setPlan(""); setHora(""); }}><X size={14} /> Limpiar</button>
       </div>
 
       <div className="op-summary">
@@ -185,26 +191,25 @@ export default function ControlOperativoPage() {
               const isFirstOfReservation = !agrupar || previousReserva !== r.id_reserva;
               const groupStart = agrupar && isFirstOfReservation;
               previousReserva = r.id_reserva;
-              const reservationCell = (content: React.ReactNode) => isFirstOfReservation ? content : null;
 
               return <tr key={`${r.id_reserva}-${r.id_participante ?? index}`} className={groupStart ? "group-start" : ""}>
-                <td>{reservationCell(<div className="op-reserva"><strong>{r.reserva_codigo}</strong><span className="state ok">Aprobada</span></div>)}</td>
-                <td className="plan-cell">{reservationCell(r.plan || "—")}</td>
+                <td><div className="op-reserva"><strong>{r.reserva_codigo}</strong><span className="state ok">Aprobada</span></div></td>
+                <td className="plan-cell">{r.plan || "—"}</td>
                 <td>{r.nombre || "—"}</td><td>{r.edad ?? "—"}</td><td>{r.nacionalidad || "—"}</td>
                 <td>{r.documento || "—"}</td><td>{r.contacto || "—"}</td>
-                <td className="center">{reservationCell(r.cantidad ?? "—")}</td>
-                <td className="center">{reservationCell(normalizeHour(r.hora))}</td>
-                <td>{reservationCell(<button className={`yn ${r.mina ? "yes" : "no"}`} onClick={() => quickToggle(r, "mina")}>{yesNo(r.mina)}</button>)}</td>
-                <td>{reservationCell(<button className={`yn ${r.refrigerio ? "yes" : "no"}`} onClick={() => quickToggle(r, "refrigerio")}>{yesNo(r.refrigerio)}</button>)}</td>
-                <td>{reservationCell(<button className={`yn ${r.restaurante ? "yes" : "no"}`} onClick={() => quickToggle(r, "restaurante")}>{yesNo(r.restaurante)}</button>)}</td>
-                <td>{reservationCell(r.almuerzo || "—")}</td>
-                <td className="money">{reservationCell(money(r.total))}</td>
-                <td className="money">{reservationCell(money(r.abono))}</td>
-                <td>{reservationCell(r.medio_abono || "—")}</td>
-                <td className="money">{reservationCell(money(r.pago_saldo))}</td>
-                <td>{reservationCell(r.medio_saldo || "—")}</td>
-                <td className={`money ${r.saldo_pendiente > 0 ? "pending-money" : "paid-money"}`}>{reservationCell(money(r.saldo_pendiente))}</td>
-                <td className="obs-cell" title={isFirstOfReservation ? r.observacion : ""}>{reservationCell(r.observacion || "—")}</td>
+                <td className="center">{isFirstOfReservation ? (r.cantidad ?? "—") : null}</td>
+                <td className="center">{normalizeHour(r.hora)}</td>
+                <td><button className={`yn ${r.mina ? "yes" : "no"}`} onClick={() => quickToggle(r, "mina")}>{yesNo(r.mina)}</button></td>
+                <td><button className={`yn ${r.refrigerio ? "yes" : "no"}`} onClick={() => quickToggle(r, "refrigerio")}>{yesNo(r.refrigerio)}</button></td>
+                <td><button className={`yn ${r.restaurante ? "yes" : "no"}`} onClick={() => quickToggle(r, "restaurante")}>{yesNo(r.restaurante)}</button></td>
+                <td>{r.almuerzo || "—"}</td>
+                <td className="money">{isFirstOfReservation ? money(r.total) : null}</td>
+                <td className="money">{isFirstOfReservation ? money(r.abono) : null}</td>
+                <td>{isFirstOfReservation ? (r.medio_abono || "—") : null}</td>
+                <td className="money">{isFirstOfReservation ? money(r.pago_saldo) : null}</td>
+                <td>{isFirstOfReservation ? (r.medio_saldo || "—") : null}</td>
+                <td className={`money ${r.saldo_pendiente > 0 ? "pending-money" : "paid-money"}`}>{isFirstOfReservation ? money(r.saldo_pendiente) : null}</td>
+                <td className="obs-cell" title={isFirstOfReservation ? r.observacion : ""}>{isFirstOfReservation ? (r.observacion || "—") : null}</td>
                 <td><div className="op-actions"><button title="Ver detalle" onClick={() => setSelected(r)}><Eye size={15} /></button><button title="Editar" onClick={() => setEditing({ ...r })}><Pencil size={15} /></button></div></td>
               </tr>;
             })}
@@ -221,8 +226,19 @@ export default function ControlOperativoPage() {
       </div></div>}
 
       {editing && <div className="op-modal-backdrop"><div className="op-modal edit-modal">
-        <div className="op-modal-head"><div><h2>Edición operativa</h2><p>Reserva {editing.reserva_codigo}</p></div><button onClick={() => setEditing(null)}><X size={20} /></button></div>
+        <div className="op-modal-head"><div><h2>Edición operativa</h2><p>Participante de la reserva {editing.reserva_codigo}</p></div><button onClick={() => setEditing(null)}><X size={20} /></button></div>
         <div className="op-edit-grid">
+          <label>Número de reserva<input value={editing.reserva_codigo} onChange={e => setEditing({ ...editing, reserva_codigo: e.target.value })} /></label>
+          <label>Plan<select value={editing.id_plan ?? ""} onChange={e => {
+            const id = e.target.value ? Number(e.target.value) : null;
+            const name = planOptions.find(([optionId]) => optionId === id)?.[1] || "";
+            setEditing({ ...editing, id_plan: id, plan: name });
+          }}><option value="">Sin plan</option>{planOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label>
+          <label>Hora<select value={editing.id_hora ?? ""} onChange={e => {
+            const id = e.target.value ? Number(e.target.value) : null;
+            const value = hourOptions.find(([optionId]) => optionId === id)?.[1] || "";
+            setEditing({ ...editing, id_hora: id, hora: value });
+          }}><option value="">Sin hora</option>{hourOptions.map(([id, value]) => <option key={id} value={id}>{normalizeHour(value)}</option>)}</select></label>
           <label>Nombre<input value={editing.nombre} onChange={e => setEditing({ ...editing, nombre: e.target.value })} /></label>
           <label>Edad<input type="number" value={editing.edad ?? ""} onChange={e => setEditing({ ...editing, edad: e.target.value ? Number(e.target.value) : null })} /></label>
           <label>Nacionalidad<input value={editing.nacionalidad} onChange={e => setEditing({ ...editing, nacionalidad: e.target.value })} /></label>
