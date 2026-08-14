@@ -31,7 +31,7 @@ function exportExcel(rows: ControlOperativoRow[]) {
     ["Reserva", r => r.reserva_codigo], ["Ruta/Plan", r => r.plan], ["Nombre", r => r.nombre],
     ["Edad", r => r.edad ?? ""], ["Nacionalidad", r => r.nacionalidad], ["Documento", r => r.documento],
     ["Contacto", r => r.contacto], ["Cantidad", r => r.cantidad ?? ""], ["Hora", r => normalizeHour(r.hora)],
-    ["Mina", r => yesNo(r.mina)], ["Refrigerio", r => yesNo(r.refrigerio)], ["Restaurante", r => yesNo(r.restaurante)],
+    ["Mina", r => yesNo(r.mina)], ["Refrigerio", r => yesNo(r.refrigerio)], ["Restaurante", r => r.restaurante],
     ["Almuerzo", r => r.almuerzo], ["Total", r => r.total], ["Abono", r => r.abono],
     ["Medio Abono", r => r.medio_abono], ["Pago Saldo", r => r.pago_saldo], ["Medio Saldo", r => r.medio_saldo],
     ["Saldo Pendiente", r => r.saldo_pendiente], ["Observación", r => r.observacion],
@@ -88,7 +88,7 @@ export default function ControlOperativoPage() {
       if (plan && r.plan !== plan) return false;
       if (hora && r.hora !== hora) return false;
       if (q) {
-        const haystack = [r.reserva_codigo, r.plan, r.nombre, r.documento, r.contacto, r.nacionalidad, r.observacion, r.almuerzo].join(" ").toLowerCase();
+        const haystack = [r.reserva_codigo, r.plan, r.nombre, r.documento, r.contacto, r.nacionalidad, r.observacion, r.restaurante, r.almuerzo].join(" ").toLowerCase();
         if (!haystack.includes(q)) return false;
       }
       return true;
@@ -98,7 +98,7 @@ export default function ControlOperativoPage() {
       : (b.id_participante ?? 0) - (a.id_participante ?? 0));
   }, [rows, search, fecha, plan, hora, agrupar]);
 
-  const quickToggle = async (row: ControlOperativoRow, field: "mina" | "refrigerio" | "restaurante") => {
+  const quickToggle = async (row: ControlOperativoRow, field: "mina" | "refrigerio") => {
     const value = !row[field];
     try {
       await updateControlReserva(row.id_reserva, { [field]: value });
@@ -114,12 +114,11 @@ export default function ControlOperativoPage() {
     setError(null);
     try {
       await updateControlReserva(editing.id_reserva, {
-        codigo_reserva: editing.reserva_codigo || null,
         id_plan: editing.id_plan,
         id_hora: editing.id_hora,
         mina: editing.mina,
         refrigerio: editing.refrigerio,
-        restaurante: editing.restaurante,
+        restaurante: editing.restaurante || null,
         tipo_almuerzo: editing.almuerzo || null,
         valor_total: editing.total,
         valor_abonado: editing.abono,
@@ -193,7 +192,7 @@ export default function ControlOperativoPage() {
               previousReserva = r.id_reserva;
 
               return <tr key={`${r.id_reserva}-${r.id_participante ?? index}`} className={groupStart ? "group-start" : ""}>
-                <td><div className="op-reserva"><strong>{r.reserva_codigo}</strong><span className="state ok">Aprobada</span></div></td>
+                <td><div className="op-reserva"><strong>#{r.id_reserva}</strong><span className="state ok">Aprobada</span></div></td>
                 <td className="plan-cell">{r.plan || "—"}</td>
                 <td>{r.nombre || "—"}</td><td>{r.edad ?? "—"}</td><td>{r.nacionalidad || "—"}</td>
                 <td>{r.documento || "—"}</td><td>{r.contacto || "—"}</td>
@@ -201,7 +200,7 @@ export default function ControlOperativoPage() {
                 <td className="center">{normalizeHour(r.hora)}</td>
                 <td><button className={`yn ${r.mina ? "yes" : "no"}`} onClick={() => quickToggle(r, "mina")}>{yesNo(r.mina)}</button></td>
                 <td><button className={`yn ${r.refrigerio ? "yes" : "no"}`} onClick={() => quickToggle(r, "refrigerio")}>{yesNo(r.refrigerio)}</button></td>
-                <td><button className={`yn ${r.restaurante ? "yes" : "no"}`} onClick={() => quickToggle(r, "restaurante")}>{yesNo(r.restaurante)}</button></td>
+                <td>{r.restaurante || "—"}</td>
                 <td>{r.almuerzo || "—"}</td>
                 <td className="money">{isFirstOfReservation ? money(r.total) : null}</td>
                 <td className="money">{isFirstOfReservation ? money(r.abono) : null}</td>
@@ -218,17 +217,17 @@ export default function ControlOperativoPage() {
       </div>
 
       {selected && <div className="op-modal-backdrop" onMouseDown={() => setSelected(null)}><div className="op-modal" onMouseDown={e => e.stopPropagation()}>
-        <div className="op-modal-head"><div><h2>Detalle operativo</h2><p>Reserva {selected.reserva_codigo}</p></div><button onClick={() => setSelected(null)}><X size={20} /></button></div>
+        <div className="op-modal-head"><div><h2>Detalle operativo</h2><p>Reserva #{selected.id_reserva}</p></div><button onClick={() => setSelected(null)}><X size={20} /></button></div>
         <div className="op-detail-grid">{[
           ["Plan", selected.plan], ["Fecha", selected.fecha], ["Hora", normalizeHour(selected.hora)], ["Participante", selected.nombre], ["Documento", `${selected.tipo_documento} ${selected.documento}`.trim()], ["Contacto", selected.contacto],
-          ["Mina", yesNo(selected.mina)], ["Refrigerio", yesNo(selected.refrigerio)], ["Restaurante", yesNo(selected.restaurante)], ["Almuerzo", selected.almuerzo || "—"], ["Total", money(selected.total)], ["Abono", money(selected.abono)], ["Pago saldo", money(selected.pago_saldo)], ["Saldo pendiente", money(selected.saldo_pendiente)], ["Observación", selected.observacion || "—"],
+          ["Mina", yesNo(selected.mina)], ["Refrigerio", yesNo(selected.refrigerio)], ["Restaurante", selected.restaurante || "—"], ["Almuerzo", selected.almuerzo || "—"], ["Total", money(selected.total)], ["Abono", money(selected.abono)], ["Pago saldo", money(selected.pago_saldo)], ["Saldo pendiente", money(selected.saldo_pendiente)], ["Observación", selected.observacion || "—"],
         ].map(([k,v]) => <div key={k}><span>{k}</span><strong>{v}</strong></div>)}</div>
       </div></div>}
 
       {editing && <div className="op-modal-backdrop"><div className="op-modal edit-modal">
-        <div className="op-modal-head"><div><h2>Edición operativa</h2><p>Participante de la reserva {editing.reserva_codigo}</p></div><button onClick={() => setEditing(null)}><X size={20} /></button></div>
+        <div className="op-modal-head"><div><h2>Edición operativa</h2><p>Participante de la reserva #{editing.id_reserva}</p></div><button onClick={() => setEditing(null)}><X size={20} /></button></div>
         <div className="op-edit-grid">
-          <label>Número de reserva<input value={editing.reserva_codigo} onChange={e => setEditing({ ...editing, reserva_codigo: e.target.value })} /></label>
+          <label>Número de reserva<input value={editing.id_reserva} readOnly title="El número de reserva corresponde al identificador interno y no se modifica desde Control Operativo." /></label>
           <label>Plan<select value={editing.id_plan ?? ""} onChange={e => {
             const id = e.target.value ? Number(e.target.value) : null;
             const name = planOptions.find(([optionId]) => optionId === id)?.[1] || "";
@@ -244,13 +243,14 @@ export default function ControlOperativoPage() {
           <label>Nacionalidad<input value={editing.nacionalidad} onChange={e => setEditing({ ...editing, nacionalidad: e.target.value })} /></label>
           <label>Documento<input value={editing.documento} onChange={e => setEditing({ ...editing, documento: e.target.value })} /></label>
           <label>Contacto<input value={editing.contacto} onChange={e => setEditing({ ...editing, contacto: e.target.value })} /></label>
+          <label>Restaurante<input value={editing.restaurante} onChange={e => setEditing({ ...editing, restaurante: e.target.value })} placeholder="Nombre o referencia del restaurante" /></label>
           <label>Almuerzo<input value={editing.almuerzo} onChange={e => setEditing({ ...editing, almuerzo: e.target.value })} /></label>
           <label>Total<input type="number" value={editing.total} onChange={e => setEditing({ ...editing, total: Number(e.target.value) })} /></label>
           <label>Abono<input type="number" value={editing.abono} onChange={e => setEditing({ ...editing, abono: Number(e.target.value) })} /></label>
           <label>Medio abono<input value={editing.medio_abono} onChange={e => setEditing({ ...editing, medio_abono: e.target.value })} /></label>
           <label>Pago saldo<input type="number" value={editing.pago_saldo} onChange={e => setEditing({ ...editing, pago_saldo: Number(e.target.value) })} /></label>
           <label>Medio saldo<input value={editing.medio_saldo} onChange={e => setEditing({ ...editing, medio_saldo: e.target.value })} /></label>
-          <div className="op-checks"><label><input type="checkbox" checked={!!editing.mina} onChange={e => setEditing({ ...editing, mina: e.target.checked })} /> Mina</label><label><input type="checkbox" checked={!!editing.refrigerio} onChange={e => setEditing({ ...editing, refrigerio: e.target.checked })} /> Refrigerio</label><label><input type="checkbox" checked={!!editing.restaurante} onChange={e => setEditing({ ...editing, restaurante: e.target.checked })} /> Restaurante</label></div>
+          <div className="op-checks"><label><input type="checkbox" checked={!!editing.mina} onChange={e => setEditing({ ...editing, mina: e.target.checked })} /> Mina</label><label><input type="checkbox" checked={!!editing.refrigerio} onChange={e => setEditing({ ...editing, refrigerio: e.target.checked })} /> Refrigerio</label></div>
           <label className="full">Observación<textarea rows={3} value={editing.observacion} onChange={e => setEditing({ ...editing, observacion: e.target.value })} /></label>
         </div>
         <div className="op-modal-footer"><button className="op-btn secondary" onClick={() => setEditing(null)}>Cancelar</button><button className="op-btn primary" onClick={saveEdit} disabled={saving}><SlidersHorizontal size={16} /> {saving ? "Guardando…" : "Guardar cambios"}</button></div>
