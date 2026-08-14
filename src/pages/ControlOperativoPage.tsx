@@ -120,7 +120,6 @@ export default function ControlOperativoPage() {
         mina: editing.mina,
         refrigerio: editing.refrigerio,
         restaurante: editing.restaurante || null,
-        tipo_almuerzo: editing.almuerzo || null,
         valor_total: editing.total,
         valor_abonado: editing.abono,
         valor_saldo_pagado: editing.pago_saldo,
@@ -140,6 +139,7 @@ export default function ControlOperativoPage() {
           nacionalidad: editing.nacionalidad || null,
           numero_documento: editing.documento || null,
           telefono_participante: participantPhone,
+          tipo_almuerzo: editing.almuerzo.trim() || null,
         });
       }
 
@@ -249,7 +249,7 @@ export default function ControlOperativoPage() {
           <label>Documento<input value={editing.documento} onChange={e => setEditing({ ...editing, documento: e.target.value })} /></label>
           <label>Contacto<input value={editing.contacto} onChange={e => setEditing({ ...editing, contacto: e.target.value })} /></label>
           <label>Restaurante<input value={editing.restaurante} onChange={e => setEditing({ ...editing, restaurante: e.target.value })} placeholder="Nombre o referencia del restaurante" /></label>
-          <label>Almuerzo<input value={editing.almuerzo} onChange={e => setEditing({ ...editing, almuerzo: e.target.value })} /></label>
+          <label>Almuerzo<input value={editing.almuerzo} onChange={e => setEditing({ ...editing, almuerzo: e.target.value })} placeholder="Opcional" /></label>
           <label>Total<input type="number" value={editing.total} onChange={e => setEditing({ ...editing, total: Number(e.target.value) })} /></label>
           <label>Abono<input type="number" value={editing.abono} onChange={e => setEditing({ ...editing, abono: Number(e.target.value) })} /></label>
           <label>Medio abono<input value={editing.medio_abono} onChange={e => setEditing({ ...editing, medio_abono: e.target.value })} /></label>
