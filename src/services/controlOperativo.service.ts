@@ -21,6 +21,7 @@ export type ControlOperativoRow = {
   tipo_documento: string;
   documento: string;
   contacto: string;
+  contacto_cliente: string;
   cantidad: number | null;
   mina: boolean | null;
   refrigerio: boolean | null;
@@ -83,6 +84,7 @@ export async function getControlOperativo(): Promise<ControlOperativoRow[]> {
     const saldo = Math.max(0, total - abono - pagoSaldo);
 
     for (const p of personas) {
+      const contactoCliente = text(p?.telefono_cliente || r.telefono_cliente);
       rows.push({
         id_reserva: Number(r.id_reserva),
         id_participante: p ? Number(p.id_participante) : null,
@@ -98,7 +100,8 @@ export async function getControlOperativo(): Promise<ControlOperativoRow[]> {
         nacionalidad: text(p?.nacionalidad),
         tipo_documento: text(p?.tipo_documento),
         documento: text(p?.numero_documento),
-        contacto: text(p?.telefono_participante || p?.telefono_cliente || r.telefono_cliente),
+        contacto: text(p?.telefono_participante || contactoCliente),
+        contacto_cliente: contactoCliente,
         cantidad: r.cantidad_personas == null ? null : Number(r.cantidad_personas),
         mina: r.mina ?? null,
         refrigerio: r.refrigerio ?? null,
