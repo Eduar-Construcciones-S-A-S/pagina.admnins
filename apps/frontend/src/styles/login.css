@@ -1,0 +1,345 @@
+/* login.css — Rediseño Desierto de Checua */
+
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Inter:wght@300;400;500;600&display=swap');
+
+:root {
+  --checua-gold: #c5a368;
+  --checua-orange: #b35a33;
+  --checua-orange-dark: #8e4427;
+  --checua-bg-dark: rgba(20, 15, 10, 0.85);
+  --checua-input-bg: rgba(255, 255, 255, 0.05);
+  --checua-border: rgba(197, 163, 104, 0.3);
+  --checua-text: #ffffff;
+  --checua-text-muted: rgba(255, 255, 255, 0.6);
+  --checua-font-title: 'Cinzel', serif;
+  --checua-font-body: 'Inter', sans-serif;
+}
+
+.login-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background-image: linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.4)), url('/fondologin.png');
+  background-size: cover;
+  background-position: center;
+  font-family: var(--checua-font-body);
+}
+
+.login-layout {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  width: 100%;
+  max-width: 1100px;
+  gap: 40px;
+  align-items: center;
+}
+
+/* ── Panel Izquierdo ── */
+.login-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  color: white;
+  padding: 20px;
+}
+
+.login-logo-main {
+  width: 160px;
+  height: auto;
+  margin-bottom: 30px;
+  filter: drop-shadow(0 4px 10px rgba(0,0,0,0.3));
+}
+
+.login-side-title {
+  font-family: var(--checua-font-title);
+  font-size: 42px;
+  font-weight: 700;
+  color: var(--checua-gold);
+  letter-spacing: 2px;
+  line-height: 1.1;
+  margin: 0 0 10px;
+  text-transform: uppercase;
+}
+
+.login-side-subtitle {
+  font-size: 18px;
+  font-weight: 400;
+  max-width: 400px;
+  margin-bottom: 40px;
+  line-height: 1.5;
+  color: var(--checua-text);
+}
+
+.login-ornament {
+  color: var(--checua-gold);
+  margin-bottom: 20px;
+  opacity: 0.8;
+}
+
+.login-footer-text {
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 1px;
+  color: var(--checua-gold);
+  max-width: 300px;
+  line-height: 1.6;
+  text-transform: uppercase;
+}
+
+/* ── Panel Derecho (Card) ── */
+.login-main {
+  display: flex;
+  justify-content: center;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--checua-bg-dark);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--checua-border);
+  border-radius: 24px;
+  padding: 50px 40px;
+  display: flex;
+  flex-direction: column;
+}
+
+.login-card-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-bottom: 35px;
+}
+
+.login-header-logo {
+  width: 80px;
+  height: auto;
+  margin-bottom: 15px;
+  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.2));
+  display: block;
+}
+
+.login-title {
+  font-family: var(--checua-font-body);
+  font-size: 24px;
+  font-weight: 500;
+  color: var(--checua-text);
+  margin: 0 0 5px;
+}
+
+.login-desc {
+  font-size: 12px;
+  color: var(--checua-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin: 0;
+}
+
+.login-separator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 15px;
+  margin-bottom: 30px;
+}
+
+.login-separator::before,
+.login-separator::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--checua-border);
+}
+
+.login-separator-diamond {
+  color: var(--checua-gold);
+  font-size: 10px;
+  transform: rotate(45deg);
+}
+
+.login-group {
+  margin-bottom: 22px;
+}
+
+.login-group label {
+  font-size: 13px;
+  color: var(--checua-text-muted);
+  margin-bottom: 8px;
+  display: block;
+}
+
+.login-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.login-input-icon {
+  position: absolute;
+  left: 14px;
+  color: var(--checua-text-muted);
+  pointer-events: none;
+}
+
+.login-group input {
+  background: var(--checua-input-bg);
+  border: 1px solid var(--checua-border);
+  border-radius: 12px;
+  padding: 14px 14px 14px 44px;
+  font-size: 14px;
+  color: white;
+  width: 100%;
+  outline: none;
+  transition: all 0.2s;
+}
+
+.login-group input:focus {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--checua-gold);
+  box-shadow: 0 0 0 4px rgba(197, 163, 104, 0.1);
+}
+
+.login-password-wrap input {
+  padding-right: 44px;
+}
+
+.login-eye {
+  position: absolute;
+  right: 14px;
+  background: none;
+  border: none;
+  color: var(--checua-text-muted);
+  cursor: pointer;
+  padding: 5px;
+  display: flex;
+  transition: color 0.2s;
+}
+
+.login-eye:hover {
+  color: var(--checua-gold);
+}
+
+.login-options {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.login-remember {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--checua-text-muted);
+}
+
+.login-remember input {
+  width: 18px;
+  height: 18px;
+  background: var(--checua-input-bg);
+  border: 1px solid var(--checua-border);
+  border-radius: 4px;
+  accent-color: var(--checua-orange);
+  cursor: pointer;
+}
+
+.login-forgot-link {
+  font-size: 13px;
+  color: var(--checua-gold);
+  text-decoration: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.login-forgot-link:hover {
+  text-decoration: underline;
+}
+
+.login-submit {
+  background: linear-gradient(90deg, var(--checua-orange) 0%, var(--checua-orange-dark) 100%);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  padding: 16px;
+  font-size: 15px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  transition: transform 0.2s, box-shadow 0.2s;
+  margin-bottom: 30px;
+}
+
+.login-submit:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(179, 90, 51, 0.3);
+}
+
+.login-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.login-card-footer {
+  border-top: 1px solid var(--checua-border);
+  padding-top: 25px;
+  display: flex;
+  gap: 15px;
+  align-items: flex-start;
+}
+
+.login-footer-icon {
+  color: #8fb15d; /* Verde oliva para el escudo */
+  flex-shrink: 0;
+}
+
+.login-footer-desc {
+  font-size: 12px;
+  color: var(--checua-text-muted);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.login-error, .login-message {
+  border-radius: 12px;
+  padding: 12px;
+  font-size: 13px;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.login-error {
+  background: rgba(220, 38, 38, 0.15);
+  border: 1px solid rgba(220, 38, 38, 0.3);
+  color: #fca5a5;
+}
+
+.login-message {
+  background: rgba(5, 150, 105, 0.15);
+  border: 1px solid rgba(5, 150, 105, 0.3);
+  color: #6ee7b7;
+}
+
+/* ── Responsive ── */
+@media (max-width: 900px) {
+  .login-layout {
+    grid-template-columns: 1fr;
+    max-width: 450px;
+  }
+  .login-side {
+    display: none;
+  }
+}

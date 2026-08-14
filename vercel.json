@@ -1,0 +1,17 @@
+{
+  "installCommand": "pnpm install",
+  "buildCommand": "pnpm build",
+  "experimentalServices": {
+    "frontend": {
+      "root": "apps/frontend",
+      "routePrefix": "/",
+      "framework": "vite"
+    },
+    "backend": {
+      "root": "apps/backend",
+      "routePrefix": "/_/backend",
+      "builder": "@vercel/node",
+      "entrypoint": "src/index.ts"
+    }
+  }
+}
