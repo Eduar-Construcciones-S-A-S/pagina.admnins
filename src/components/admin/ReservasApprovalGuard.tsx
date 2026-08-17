@@ -11,13 +11,11 @@ type ReservaLite = {
   aprobado?: boolean | null;
 };
 
-const METODOS_PAGO = [
-  "Efectivo",
-  "Transferencia bancaria",
-  "Bancolombia",
-  "Nequi",
-  "Daviplata",
-  "Tarjeta",
+type MedioPago = "efectivo" | "transferencia";
+
+const METODOS_PAGO: { value: MedioPago; label: string }[] = [
+  { value: "efectivo", label: "Efectivo" },
+  { value: "transferencia", label: "Transferencia" },
 ];
 
 function fmt(dateStr?: string | null) {
@@ -44,7 +42,7 @@ export default function ReservasApprovalGuard() {
   const [reservas, setReservas] = useState<ReservaLite[]>([]);
   const [selected, setSelected] = useState<ReservaLite | null>(null);
   const [valorAbonado, setValorAbonado] = useState("");
-  const [metodoPago, setMetodoPago] = useState("");
+  const [metodoPago, setMetodoPago] = useState<MedioPago | "">("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -188,14 +186,14 @@ export default function ReservasApprovalGuard() {
                   <select
                     value={metodoPago}
                     onChange={(e) => {
-                      setMetodoPago(e.target.value);
+                      setMetodoPago(e.target.value as MedioPago | "");
                       if (error) setError(null);
                     }}
                     disabled={saving}
                   >
                     <option value="">Seleccionar método de pago</option>
                     {METODOS_PAGO.map((metodo) => (
-                      <option key={metodo} value={metodo}>{metodo}</option>
+                      <option key={metodo.value} value={metodo.value}>{metodo.label}</option>
                     ))}
                   </select>
                 </div>
