@@ -78,7 +78,23 @@ export async function getControlOperativo(): Promise<ControlOperativoRow[]> {
     const fecha = fechaMap.get(Number(r.id_fecha));
     const hora = horaMap.get(Number(r.id_hora));
     const personas = participantesPorReserva.get(Number(r.id_reserva)) ?? [null];
-    const total = num(r.valor_total ?? (num(r.precio_unitario) * num(r.cantidad_personas)));
+
+    // El precio vigente del plan es la fuente de verdad del valor unitario.
+    // La cantidad sale de la reserva; si un registro antiguo no la tiene,
+    // usamos la cantidad real de participantes vinculados.
+    const cantidadPersonas = r.cantidad_personas == null
+      ? personas.filter(Boolean).length
+      : num(r.cantidad_personas);
+    const precioPlan = num(plan?.precio_plan);
+
+    // Total = precio_plan × cantidad_personas. Solo se usan los campos antiguos
+    // de la reserva como respaldo si el plan no tiene precio configurado.
+    const totalCalculado = precioPlan > 0 ? precioPlan * cantidadPersonas : 0;
+    const totalRespaldo = num(r.valor_total) > 0
+      ? num(r.valor_total)
+      : num(r.precio_unitario) * cantidadPersonas;
+    const total = totalCalculado > 0 ? totalCalculado : totalRespaldo;
+
     const abono = num(r.valor_abonado);
     const pagoSaldo = num(r.valor_saldo_pagado);
     const saldo = Math.max(0, total - abono - pagoSaldo);
@@ -102,7 +118,7 @@ export async function getControlOperativo(): Promise<ControlOperativoRow[]> {
         documento: text(p?.numero_documento),
         contacto: text(p?.telefono_participante || contactoCliente),
         contacto_cliente: contactoCliente,
-        cantidad: r.cantidad_personas == null ? null : Number(r.cantidad_personas),
+        cantidad: cantidadPersonas,
         mina: r.mina ?? null,
         refrigerio: r.refrigerio ?? null,
         restaurante: text(r.restaurante),
