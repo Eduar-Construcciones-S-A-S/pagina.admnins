@@ -79,16 +79,11 @@ export async function getControlOperativo(): Promise<ControlOperativoRow[]> {
     const hora = horaMap.get(Number(r.id_hora));
     const personas = participantesPorReserva.get(Number(r.id_reserva)) ?? [null];
 
-    // El precio vigente del plan es la fuente de verdad del valor unitario.
-    // La cantidad sale de la reserva; si un registro antiguo no la tiene,
-    // usamos la cantidad real de participantes vinculados.
     const cantidadPersonas = r.cantidad_personas == null
       ? personas.filter(Boolean).length
       : num(r.cantidad_personas);
     const precioPlan = num(plan?.precio_plan);
 
-    // Total = precio_plan × cantidad_personas. Solo se usan los campos antiguos
-    // de la reserva como respaldo si el plan no tiene precio configurado.
     const totalCalculado = precioPlan > 0 ? precioPlan * cantidadPersonas : 0;
     const totalRespaldo = num(r.valor_total) > 0
       ? num(r.valor_total)
@@ -104,7 +99,7 @@ export async function getControlOperativo(): Promise<ControlOperativoRow[]> {
       rows.push({
         id_reserva: Number(r.id_reserva),
         id_participante: p ? Number(p.id_participante) : null,
-        reserva_codigo: String(r.id_reserva),
+        reserva_codigo: text(r.codigo_reserva) || `#${r.id_reserva}`,
         id_plan: r.id_plan == null ? null : Number(r.id_plan),
         id_hora: r.id_hora == null ? null : Number(r.id_hora),
         plan: text(plan?.nombre_plan),
