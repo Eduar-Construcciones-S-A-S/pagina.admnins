@@ -169,7 +169,7 @@ export default function ControlOperativoPage() {
       {error && <div className="op-error">{error}</div>}
 
       <div className="op-filters">
-        <div className="op-search"><Search size={16} /><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar reserva, nombre, documento, contacto…" /></div>
+        <div className="op-search"><Search size={16} /><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar código de reserva, nombre, documento, contacto…" /></div>
         <label><span>Fecha</span><select value={fecha} onChange={e => setFecha(e.target.value)}><option value="">Todas</option>{fechas.map(v => <option key={v}>{v}</option>)}</select></label>
         <label><span>Plan</span><select value={plan} onChange={e => setPlan(e.target.value)}><option value="">Todos</option>{planes.map(v => <option key={v}>{v}</option>)}</select></label>
         <label><span>Horario</span><select value={hora} onChange={e => setHora(e.target.value)}><option value="">Todos</option>{horas.map(v => <option key={v} value={v}>{normalizeHour(v)}</option>)}</select></label>
@@ -187,7 +187,7 @@ export default function ControlOperativoPage() {
       <div className="op-table-wrap">
         <table className="op-table">
           <thead><tr>
-            <th>Reserva</th><th>Ruta / Plan</th><th>Nombre</th><th>Edad</th><th>Nacionalidad</th><th>Documento</th><th>Contacto</th><th>Cantidad</th><th>Hora</th>
+            <th>Código reserva</th><th>Ruta / Plan</th><th>Nombre</th><th>Edad</th><th>Nacionalidad</th><th>Documento</th><th>Contacto</th><th>Cantidad</th><th>Hora</th>
             <th>Mina</th><th>Refrigerio</th><th>Restaurante</th><th>Almuerzo</th><th>Total</th><th>Abono</th><th>Medio Abono</th><th>Pago Saldo</th><th>Medio Saldo</th><th>Saldo Pendiente</th><th>Observación</th><th>Acciones</th>
           </tr></thead>
           <tbody>
@@ -197,7 +197,7 @@ export default function ControlOperativoPage() {
               previousReserva = r.id_reserva;
 
               return <tr key={`${r.id_reserva}-${r.id_participante ?? index}`} className={groupStart ? "group-start" : ""}>
-                <td><div className="op-reserva"><strong>#{r.id_reserva}</strong><span className="state ok">Aprobada</span></div></td>
+                <td><div className="op-reserva"><strong>{r.reserva_codigo}</strong><span className="state ok">Aprobada</span></div></td>
                 <td className="plan-cell">{r.plan || "—"}</td>
                 <td>{r.nombre || "—"}</td><td>{r.edad ?? "—"}</td><td>{r.nacionalidad || "—"}</td>
                 <td>{r.documento || "—"}</td><td>{r.contacto || "—"}</td>
@@ -222,7 +222,7 @@ export default function ControlOperativoPage() {
       </div>
 
       {selected && <div className="op-modal-backdrop" onMouseDown={() => setSelected(null)}><div className="op-modal" onMouseDown={e => e.stopPropagation()}>
-        <div className="op-modal-head"><div><h2>Detalle operativo</h2><p>Reserva #{selected.id_reserva}</p></div><button onClick={() => setSelected(null)}><X size={20} /></button></div>
+        <div className="op-modal-head"><div><h2>Detalle operativo</h2><p>Reserva {selected.reserva_codigo}</p></div><button onClick={() => setSelected(null)}><X size={20} /></button></div>
         <div className="op-detail-grid">{[
           ["Plan", selected.plan], ["Fecha", selected.fecha], ["Hora", normalizeHour(selected.hora)], ["Participante", selected.nombre], ["Documento", `${selected.tipo_documento} ${selected.documento}`.trim()], ["Contacto", selected.contacto],
           ["Mina", yesNo(selected.mina)], ["Refrigerio", yesNo(selected.refrigerio)], ["Restaurante", selected.restaurante || "—"], ["Almuerzo", selected.almuerzo || "—"], ["Total", money(selected.total)], ["Abono", money(selected.abono)], ["Pago saldo", money(selected.pago_saldo)], ["Saldo pendiente", money(selected.saldo_pendiente)], ["Observación", selected.observacion || "—"],
@@ -230,9 +230,9 @@ export default function ControlOperativoPage() {
       </div></div>}
 
       {editing && <div className="op-modal-backdrop"><div className="op-modal edit-modal">
-        <div className="op-modal-head"><div><h2>Edición operativa</h2><p>Participante de la reserva #{editing.id_reserva}</p></div><button onClick={() => setEditing(null)}><X size={20} /></button></div>
+        <div className="op-modal-head"><div><h2>Edición operativa</h2><p>Participante de la reserva {editing.reserva_codigo}</p></div><button onClick={() => setEditing(null)}><X size={20} /></button></div>
         <div className="op-edit-grid">
-          <label>Número de reserva<input value={editing.id_reserva} readOnly title="El número de reserva corresponde al identificador interno y no se modifica desde Control Operativo." /></label>
+          <label>Código de reserva<input value={editing.reserva_codigo} readOnly title="El código de reserva se genera automáticamente en Supabase y no se modifica desde Control Operativo." /></label>
           <label>Plan<select value={editing.id_plan ?? ""} onChange={e => {
             const id = e.target.value ? Number(e.target.value) : null;
             const name = planOptions.find(([optionId]) => optionId === id)?.[1] || "";
