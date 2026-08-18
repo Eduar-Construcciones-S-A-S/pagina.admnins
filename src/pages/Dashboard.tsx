@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import "../styles/dashboard.css";
 import "../styles/global.css";
 import "../styles/responsive-admin.css";
+import "../styles/desktop-admin-tuning.css";
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { logout } from "../services/auth.service";
 import { supabase } from "../lib/supabase";
