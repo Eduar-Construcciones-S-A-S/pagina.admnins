@@ -1,21 +1,34 @@
-/* Sidebar administrativo: conserva la identidad visual de Desierto de Checua */
+/* Sidebar administrativo — navegación principal de Desierto de Checua
+   Diseño de escritorio: jerarquía clara, profundidad sutil y transición fluida. */
 
 :root {
-  --sidebar-expanded: 248px;
-  --sidebar-collapsed: 76px;
+  --sidebar-expanded: 250px;
+  --sidebar-collapsed: 78px;
+  --sidebar-bg: #15100c;
+  --sidebar-bg-deep: #100c09;
+  --sidebar-surface: rgba(255,255,255,.035);
+  --sidebar-border: rgba(197,163,104,.16);
+  --sidebar-text: #b8aaa0;
+  --sidebar-muted: #81746b;
+  --sidebar-gold: #c5a368;
+  --sidebar-gold-soft: #dec79c;
 }
 
 .dash-root {
   min-height: 100vh;
+  background: #f6f3ee;
 }
 
 .dash-shell {
   min-height: 100vh;
   display: flex;
   align-items: stretch;
-  background: var(--bg);
+  background:
+    radial-gradient(circle at 92% 0%, rgba(197,163,104,.07), transparent 24rem),
+    #f7f5f1;
 }
 
+/* ───────────────── Sidebar ───────────────── */
 .dash-sidebar {
   width: var(--sidebar-expanded);
   flex: 0 0 var(--sidebar-expanded);
@@ -23,38 +36,72 @@
   position: sticky;
   top: 0;
   height: 100vh;
-  z-index: 60;
+  z-index: 70;
   display: flex;
   flex-direction: column;
-  background: var(--checua-bg-dark);
-  border-right: 1px solid var(--checua-border);
-  box-shadow: 6px 0 18px rgba(45,36,30,.05);
-  transition: width .22s ease, flex-basis .22s ease;
-  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(197,163,104,.055) 0, transparent 120px),
+    linear-gradient(180deg, var(--sidebar-bg) 0%, var(--sidebar-bg-deep) 100%);
+  border-right: 1px solid var(--sidebar-border);
+  box-shadow:
+    10px 0 34px rgba(35,25,18,.10),
+    1px 0 0 rgba(255,255,255,.025) inset;
+  transition:
+    width .24s cubic-bezier(.4,0,.2,1),
+    flex-basis .24s cubic-bezier(.4,0,.2,1),
+    box-shadow .2s ease;
+  /* El botón de contraer sobresale del borde; por eso no se oculta aquí. */
+  overflow: visible;
+}
+
+.dash-sidebar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(255,255,255,.015), transparent 45%);
 }
 
 .dash-sidebar.collapsed {
   width: var(--sidebar-collapsed);
   flex-basis: var(--sidebar-collapsed);
+  box-shadow: 8px 0 28px rgba(35,25,18,.09);
 }
 
+/* ───────────────── Marca ───────────────── */
 .sidebar-brand {
-  height: 74px;
+  height: 82px;
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 0 18px;
-  border-bottom: 1px solid rgba(197,163,104,.16);
+  border-bottom: 1px solid rgba(197,163,104,.12);
   flex-shrink: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.sidebar-brand::after {
+  content: "";
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(197,163,104,.22), transparent);
 }
 
 .sidebar-brand-icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
   overflow: hidden;
   flex: 0 0 auto;
-  background: var(--checua-orange);
+  background: #9b5d31;
+  border: 1px solid rgba(197,163,104,.28);
+  box-shadow:
+    0 8px 18px rgba(0,0,0,.18),
+    0 0 0 3px rgba(197,163,104,.045);
 }
 
 .sidebar-brand-icon img {
@@ -67,178 +114,232 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  line-height: 1.1;
+  line-height: 1.08;
   opacity: 1;
-  transition: opacity .15s ease;
+  transform: translateX(0);
+  transition: opacity .16s ease, transform .2s ease, width .2s ease;
 }
 
 .sidebar-brand-copy strong {
   font-family: 'Cinzel', serif;
-  color: var(--checua-gold);
-  font-size: 13px;
-  letter-spacing: .7px;
+  color: var(--sidebar-gold-soft);
+  font-size: 12.5px;
+  letter-spacing: .72px;
   text-transform: uppercase;
   white-space: nowrap;
 }
 
 .sidebar-brand-copy span {
-  color: #8f8177;
-  font-size: 10px;
-  margin-top: 4px;
+  color: #887970;
+  font-size: 9px;
+  margin-top: 5px;
   text-transform: uppercase;
-  letter-spacing: .12em;
+  letter-spacing: .16em;
 }
 
+/* ───────────────── Botón contraer ───────────────── */
 .sidebar-collapse-btn {
   position: absolute;
-  top: 88px;
-  right: -13px;
-  width: 26px;
-  height: 26px;
-  border: 1px solid #d7c7ac;
-  border-radius: 50%;
-  background: #fff;
-  color: #6b5c51;
+  top: 27px;
+  right: -15px;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(197,163,104,.34);
+  border-radius: 10px;
+  background: #fffdf9;
+  color: #6c5338;
   display: grid;
   place-items: center;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(45,36,30,.14);
-  z-index: 5;
-  transition: transform .15s ease, background .15s ease;
+  box-shadow:
+    0 6px 18px rgba(44,31,21,.17),
+    0 1px 2px rgba(44,31,21,.10);
+  z-index: 100;
+  transition: transform .16s ease, color .16s ease, background .16s ease, box-shadow .16s ease;
 }
 
 .sidebar-collapse-btn:hover {
-  background: #faf7f0;
-  transform: scale(1.05);
+  color: #3e2b1d;
+  background: #fff8ea;
+  transform: translateX(1px) scale(1.06);
+  box-shadow: 0 8px 22px rgba(44,31,21,.20);
 }
 
+.sidebar-collapse-btn:focus-visible {
+  outline: 3px solid rgba(197,163,104,.26);
+  outline-offset: 2px;
+}
+
+/* ───────────────── Navegación ───────────────── */
 .sidebar-nav {
-  padding: 24px 12px 12px;
+  padding: 20px 12px 16px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(197,163,104,.20) transparent;
 }
 
 .sidebar-link {
-  min-height: 43px;
-  border-radius: 10px;
+  min-height: 44px;
+  border-radius: 11px;
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 0 12px;
-  color: #aa9b90;
+  color: var(--sidebar-text);
   text-decoration: none;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 700;
-  letter-spacing: .35px;
+  letter-spacing: .32px;
   text-transform: uppercase;
   position: relative;
-  transition: background .15s ease, color .15s ease, transform .15s ease;
+  transition: background .16s ease, color .16s ease, transform .16s ease, box-shadow .16s ease;
   white-space: nowrap;
+}
+
+.sidebar-link::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 9px;
+  bottom: 9px;
+  width: 3px;
+  border-radius: 0 4px 4px 0;
+  background: transparent;
+  transition: background .16s ease, box-shadow .16s ease;
 }
 
 .sidebar-link svg {
   width: 18px;
   height: 18px;
   flex: 0 0 18px;
+  opacity: .88;
+  transition: opacity .16s ease, transform .16s ease;
 }
 
 .sidebar-link:hover {
-  color: var(--checua-gold-light);
-  background: rgba(197,163,104,.09);
+  color: #eadbc5;
+  background: rgba(197,163,104,.075);
   transform: translateX(2px);
 }
 
+.sidebar-link:hover svg {
+  opacity: 1;
+  transform: scale(1.04);
+}
+
 .sidebar-link.active {
-  color: var(--checua-bg-dark);
-  background: linear-gradient(135deg, #d2b477 0%, var(--checua-gold) 100%);
-  box-shadow: 0 4px 14px rgba(197,163,104,.16);
+  color: #24180e;
+  background: linear-gradient(135deg, #ddc38e 0%, #c8a667 55%, #b88f50 100%);
+  box-shadow:
+    0 7px 20px rgba(0,0,0,.16),
+    0 1px 0 rgba(255,255,255,.26) inset;
+  transform: none;
+}
+
+.sidebar-link.active::before {
+  background: #f4dfb6;
+  box-shadow: 0 0 12px rgba(244,223,182,.45);
+}
+
+.sidebar-link.active svg {
+  opacity: 1;
 }
 
 .sidebar-link-label {
   overflow: hidden;
   text-overflow: ellipsis;
   opacity: 1;
-  transition: opacity .12s ease;
+  transition: opacity .13s ease, width .2s ease;
 }
 
+/* ───────────────── Pie / usuario ───────────────── */
 .sidebar-footer {
   padding: 12px;
-  border-top: 1px solid rgba(197,163,104,.13);
+  border-top: 1px solid rgba(197,163,104,.11);
+  background: rgba(0,0,0,.10);
+  overflow: hidden;
 }
 
 .sidebar-user {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 10px 12px;
+  padding: 8px 8px 12px;
   min-width: 0;
 }
 
 .sidebar-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 9px;
-  background: rgba(197,163,104,.16);
-  border: 1px solid rgba(197,163,104,.24);
-  color: var(--checua-gold);
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: linear-gradient(145deg, rgba(197,163,104,.20), rgba(197,163,104,.08));
+  border: 1px solid rgba(197,163,104,.25);
+  color: #e0c795;
   font-size: 12px;
   font-weight: 800;
   display: grid;
   place-items: center;
   flex: 0 0 auto;
+  box-shadow: 0 5px 14px rgba(0,0,0,.13);
 }
 
 .sidebar-user-copy {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  opacity: 1;
+  transition: opacity .14s ease;
 }
 
 .sidebar-user-copy span:first-child {
   color: #d8cbc1;
-  font-size: 10px;
-  font-weight: 700;
+  font-size: 9.5px;
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: .08em;
+  letter-spacing: .09em;
 }
 
 .sidebar-user-copy span:last-child {
-  color: #8f8177;
-  font-size: 10px;
+  color: #887a70;
+  font-size: 9.5px;
+  margin-top: 2px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 155px;
+  max-width: 158px;
 }
 
 .sidebar-logout {
   width: 100%;
-  height: 38px;
-  border-radius: 9px;
-  border: 1px solid rgba(197,163,104,.18);
-  background: transparent;
-  color: #a8998d;
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid rgba(197,163,104,.15);
+  background: rgba(255,255,255,.018);
+  color: #a99b91;
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 0 11px;
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  transition: background .15s ease, color .15s ease;
+  font-size: 11.5px;
+  font-weight: 650;
+  transition: background .16s ease, color .16s ease, border-color .16s ease;
   white-space: nowrap;
 }
 
 .sidebar-logout:hover {
-  background: rgba(197,163,104,.08);
-  color: #e7dacd;
+  background: rgba(197,163,104,.075);
+  border-color: rgba(197,163,104,.26);
+  color: #eadfd3;
 }
 
+/* ───────────────── Estado contraído ───────────────── */
 .dash-sidebar.collapsed .sidebar-brand {
   padding-inline: 19px;
 }
@@ -249,18 +350,24 @@
 .dash-sidebar.collapsed .sidebar-logout span {
   opacity: 0;
   width: 0;
+  max-width: 0;
   overflow: hidden;
   pointer-events: none;
+  transform: translateX(-5px);
 }
 
 .dash-sidebar.collapsed .sidebar-nav {
-  padding-inline: 10px;
+  padding-inline: 11px;
 }
 
 .dash-sidebar.collapsed .sidebar-link {
   justify-content: center;
   padding: 0;
   gap: 0;
+}
+
+.dash-sidebar.collapsed .sidebar-link::before {
+  left: -11px;
 }
 
 .dash-sidebar.collapsed .sidebar-link:hover {
@@ -277,15 +384,38 @@
   padding: 0;
 }
 
+/* ───────────────── Área de trabajo ───────────────── */
 .dash-content {
   flex: 1 1 auto;
   min-width: 0;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  position: relative;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.74) 0%, rgba(250,248,244,.94) 260px),
+    #f7f5f1;
 }
 
-/* Desktop: desaparece la navegación superior; el contenido conserva todo el espacio restante. */
+.dash-content::before {
+  content: "";
+  position: fixed;
+  pointer-events: none;
+  z-index: 0;
+  top: 0;
+  right: 0;
+  width: 420px;
+  height: 260px;
+  background: radial-gradient(circle at top right, rgba(197,163,104,.075), transparent 68%);
+}
+
+.dash-main {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+}
+
+/* Profundidad coherente para los principales bloques del panel. */
 @media (min-width: 981px) {
   .dash-header {
     display: none !important;
@@ -293,10 +423,55 @@
 
   .dash-main {
     flex: 1 1 auto;
+    padding-top: 24px !important;
+  }
+
+  .crm-card,
+  .crm-kpi,
+  .cl-kpi,
+  .pt-kpi,
+  .rv-kpi,
+  .planes-kpi,
+  .cl-filter-bar,
+  .pt-filter-bar,
+  .rv-filter-bar,
+  .planes-filter-bar,
+  .cl-table-wrap,
+  .pt-table-wrap,
+  .rv-table-wrap,
+  .planes-table-wrap,
+  .op-table-wrap {
+    border-color: rgba(108,83,56,.12) !important;
+    box-shadow:
+      0 10px 28px rgba(55,40,28,.055),
+      0 2px 7px rgba(55,40,28,.035) !important;
+  }
+
+  .crm-kpi,
+  .cl-kpi,
+  .pt-kpi,
+  .rv-kpi,
+  .planes-kpi {
+    transition: transform .16s ease, box-shadow .16s ease;
+  }
+
+  .crm-kpi:hover,
+  .cl-kpi:hover,
+  .pt-kpi:hover,
+  .rv-kpi:hover,
+  .planes-kpi:hover {
+    transform: translateY(-1px);
+    box-shadow:
+      0 14px 30px rgba(55,40,28,.075),
+      0 3px 8px rgba(55,40,28,.045) !important;
+  }
+
+  .crm-decision-strip {
+    box-shadow: 0 14px 32px rgba(29,20,14,.11);
   }
 }
 
-/* Tablet y móvil: se conserva el header compacto + drawer ya existente. */
+/* Tablet y móvil: se conserva el header compacto + drawer. */
 @media (max-width: 980px) {
   .dash-shell {
     display: block;
@@ -312,5 +487,9 @@
 
   .dash-header {
     display: block !important;
+  }
+
+  .dash-content::before {
+    display: none;
   }
 }
