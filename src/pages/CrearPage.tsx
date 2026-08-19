@@ -1,0 +1,161 @@
+import { useEffect, useState } from "react";
+import { CreditCard, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import {
+  createMetodoPago,
+  deleteMetodoPago,
+  getMetodosPago,
+  renameMetodoPago,
+} from "../services/medioPago.service";
+import "../styles/crear.css";
+
+export default function CrearPage() {
+  const [items, setItems] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [nuevo, setNuevo] = useState("");
+  const [editing, setEditing] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+
+  const load = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setItems(await getMetodosPago());
+    } catch (e: any) {
+      setError(e?.message || "No fue posible cargar los métodos de pago.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const add = async () => {
+    const value = nuevo.trim().toLowerCase();
+    if (!value) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await createMetodoPago(value);
+      setNuevo("");
+      await load();
+    } catch (e: any) {
+      setError(e?.message || "No fue posible crear el método de pago.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveRename = async () => {
+    if (!editing || !editValue.trim()) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await renameMetodoPago(editing, editValue);
+      setEditing(null);
+      setEditValue("");
+      await load();
+    } catch (e: any) {
+      setError(e?.message || "No fue posible renombrar el método de pago.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const remove = async (value: string) => {
+    if (!confirm(`¿Eliminar el método de pago “${value}”?`)) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await deleteMetodoPago(value);
+      await load();
+    } catch (e: any) {
+      setError(e?.message || "No fue posible eliminar el método de pago.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="crear-page">
+      <div className="crear-head">
+        <div>
+          <span className="crear-eyebrow">Configuración administrativa</span>
+          <h1>Crear</h1>
+          <p>Administra los valores disponibles del enum <strong>medio_pago</strong>.</p>
+        </div>
+        <button className="crear-btn secondary" onClick={load} disabled={loading || saving}>
+          <RefreshCw size={16} /> Actualizar
+        </button>
+      </div>
+
+      {error && <div className="crear-error">{error}</div>}
+
+      <div className="crear-grid">
+        <section className="crear-card crear-create-card">
+          <div className="crear-card-title">
+            <div className="crear-icon"><Plus size={20} /></div>
+            <div><h2>Nuevo método de pago</h2><p>El valor quedará disponible en reservas y pagos.</p></div>
+          </div>
+          <div className="crear-form-row">
+            <input value={nuevo} onChange={e => setNuevo(e.target.value)} placeholder="Ej. tarjeta" onKeyDown={e => { if (e.key === "Enter") add(); }} />
+            <button className="crear-btn primary" onClick={add} disabled={saving || !nuevo.trim()}><Plus size={16} /> Agregar</button>
+          </div>
+          <small>Se guarda en minúsculas para mantener una nomenclatura consistente.</small>
+        </section>
+
+        <section className="crear-card crear-summary-card">
+          <div className="crear-summary-icon"><CreditCard size={23} /></div>
+          <div><span>Métodos configurados</span><strong>{items.length}</strong></div>
+        </section>
+      </div>
+
+      <section className="crear-card crear-list-card">
+        <div className="crear-list-head">
+          <div><h2>Métodos de pago</h2><p>Valores actuales del enum <code>public.medio_pago</code>.</p></div>
+        </div>
+
+        {loading ? (
+          <div className="crear-empty">Cargando métodos de pago…</div>
+        ) : items.length === 0 ? (
+          <div className="crear-empty">No hay métodos de pago configurados.</div>
+        ) : (
+          <div className="crear-table-wrap">
+            <table className="crear-table">
+              <thead><tr><th>#</th><th>Valor</th><th>Estado</th><th>Acciones</th></tr></thead>
+              <tbody>
+                {items.map((item, index) => (
+                  <tr key={item}>
+                    <td>{index + 1}</td>
+                    <td>
+                      {editing === item ? (
+                        <input className="crear-edit-input" value={editValue} onChange={e => setEditValue(e.target.value)} autoFocus />
+                      ) : <span className="crear-value">{item}</span>}
+                    </td>
+                    <td><span className="crear-status">Disponible</span></td>
+                    <td>
+                      <div className="crear-actions">
+                        {editing === item ? (
+                          <>
+                            <button className="crear-action save" onClick={saveRename} disabled={saving || !editValue.trim()}>Guardar</button>
+                            <button className="crear-action" onClick={() => { setEditing(null); setEditValue(""); }}><X size={15} /></button>
+                          </>
+                        ) : (
+                          <>
+                            <button className="crear-action" title="Renombrar" onClick={() => { setEditing(item); setEditValue(item); }}><Pencil size={15} /></button>
+                            <button className="crear-action danger" title="Eliminar" onClick={() => remove(item)} disabled={saving}><Trash2 size={15} /></button>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
