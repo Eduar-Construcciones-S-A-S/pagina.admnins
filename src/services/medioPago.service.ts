@@ -11,6 +11,12 @@ export async function getMetodosPago(): Promise<string[]> {
   return (data ?? []).map((row: any) => String(row.valor ?? row));
 }
 
+export async function getMetodosPagoActivos(): Promise<string[]> {
+  const { data, error } = await client().rpc("list_medio_pago_activos");
+  if (error) throw error;
+  return (data ?? []).map((row: any) => String(row.valor ?? row));
+}
+
 export async function createMetodoPago(valor: string) {
   const { error } = await client().rpc("admin_add_medio_pago", { p_valor: valor.trim().toLowerCase() });
   if (error) throw error;
