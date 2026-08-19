@@ -5,6 +5,7 @@ import { getReservas, updateReserva } from "../../services/api.service";
 
 type ReservaLite = {
   id_reserva: number;
+  codigo_reserva?: string | null;
   fecha_solicitud?: string | null;
   telefono_cliente: string;
   id_plan: number;
@@ -17,17 +18,6 @@ const METODOS_PAGO: { value: MedioPago; label: string }[] = [
   { value: "efectivo", label: "Efectivo" },
   { value: "transferencia", label: "Transferencia" },
 ];
-
-function fmt(dateStr?: string | null) {
-  if (!dateStr) return "";
-  return new Date(dateStr).toLocaleString("es-CO", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 function onlyDigits(value: string) {
   return value.replace(/\D/g, "");
@@ -58,19 +48,31 @@ export default function ReservasApprovalGuard() {
     const row = button.closest("tr");
     if (!row) return null;
 
+    // La primera columna de la tabla contiene el código real CH... de la reserva.
+    // Es el identificador visual más seguro y evita depender del plan o de la fecha.
+    const codigo = row.querySelector("td:first-child")?.textContent?.trim() ?? "";
+    if (codigo) {
+      const byCode = reservaMap.find(
+        (r) => String(r.codigo_reserva ?? "").trim().toLowerCase() === codigo.toLowerCase()
+      );
+      if (byCode) return byCode;
+
+      // Compatibilidad con reservas antiguas que todavía se muestren como #ID.
+      const legacyId = Number(codigo.replace(/\D/g, ""));
+      if (codigo.startsWith("#") && legacyId) {
+        const byId = reservaMap.find((r) => Number(r.id_reserva) === legacyId);
+        if (byId) return byId;
+      }
+    }
+
+    // Respaldo para cualquier fila antigua: teléfono + estado pendiente.
     const phoneText = row.querySelector(".rv-phone")?.textContent ?? "";
     const phone = onlyDigits(phoneText);
-    const planText = row.querySelector(".rv-plan-id")?.textContent ?? "";
-    const planId = Number(planText.replace(/\D/g, ""));
-    const requestDateText = row.querySelector("td:first-child")?.textContent?.trim() ?? "";
-
-    const candidates = reservaMap.filter((r) =>
-      onlyDigits(r.telefono_cliente) === phone && Number(r.id_plan) === planId && !r.aprobado
+    const candidates = reservaMap.filter(
+      (r) => onlyDigits(r.telefono_cliente) === phone && !r.aprobado
     );
 
-    if (candidates.length === 1) return candidates[0];
-
-    return candidates.find((r) => fmt(r.fecha_solicitud) === requestDateText) ?? candidates[0] ?? null;
+    return candidates.length === 1 ? candidates[0] : null;
   };
 
   const handleClickCapture = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -148,7 +150,7 @@ export default function ReservasApprovalGuard() {
           <div className="rv-modal rv-modal-sm" onClick={(e) => e.stopPropagation()}>
             <div className="rv-modal-header">
               <div>
-                <h2>Aprobar reserva #{selected.id_reserva}</h2>
+                <h2>Aprobar reserva {selected.codigo_reserva || `#${selected.id_reserva}`}</h2>
                 <p style={{ margin: "4px 0 0", color: "#64748b", fontSize: 13 }}>
                   Registra el abono recibido antes de confirmar la aprobación.
                 </p>
@@ -164,33 +166,23 @@ export default function ReservasApprovalGuard() {
                   <label>Valor abonado *</label>
                   <div style={{ position: "relative" }}>
                     <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#64748b", fontWeight: 600 }}>$</span>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      autoFocus
-                      value={valorAbonado}
+                    <input type="text" inputMode="numeric" autoFocus value={valorAbonado}
                       onChange={(e) => {
                         const digits = e.target.value.replace(/\D/g, "");
                         setValorAbonado(digits ? Number(digits).toLocaleString("es-CO") : "");
                         if (error) setError(null);
                       }}
-                      placeholder="0"
-                      style={{ paddingLeft: 28 }}
-                      disabled={saving}
-                    />
+                      placeholder="0" style={{ paddingLeft: 28 }} disabled={saving} />
                   </div>
                 </div>
 
                 <div className="rv-form-group">
                   <label>Método de pago del abono *</label>
-                  <select
-                    value={metodoPago}
+                  <select value={metodoPago}
                     onChange={(e) => {
                       setMetodoPago(e.target.value as MedioPago | "");
                       if (error) setError(null);
-                    }}
-                    disabled={saving}
-                  >
+                    }} disabled={saving}>
                     <option value="">Seleccionar método de pago</option>
                     {METODOS_PAGO.map((metodo) => (
                       <option key={metodo.value} value={metodo.value}>{metodo.label}</option>
@@ -203,11 +195,7 @@ export default function ReservasApprovalGuard() {
                   <span>Al confirmar se guardarán el valor abonado, el método de pago y la fecha exacta de aprobación.</span>
                 </div>
 
-                {error && (
-                  <div style={{ padding: "10px 12px", borderRadius: 8, background: "#fff1f2", color: "#be123c", fontSize: 13 }}>
-                    {error}
-                  </div>
-                )}
+                {error && <div style={{ padding: "10px 12px", borderRadius: 8, background: "#fff1f2", color: "#be123c", fontSize: 13 }}>{error}</div>}
               </div>
             </div>
 
