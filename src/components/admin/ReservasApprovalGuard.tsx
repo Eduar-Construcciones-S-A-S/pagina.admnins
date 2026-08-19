@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, CreditCard, X } from "lucide-react";
 import ReservasAdmin from "./ReservasAdmin";
 import { getReservas, updateReserva } from "../../services/api.service";
+import { getMetodosPagoActivos } from "../../services/medioPago.service";
 
 type ReservaLite = {
   id_reserva: number;
@@ -12,13 +13,6 @@ type ReservaLite = {
   aprobado?: boolean | null;
 };
 
-type MedioPago = "efectivo" | "transferencia";
-
-const METODOS_PAGO: { value: MedioPago; label: string }[] = [
-  { value: "efectivo", label: "Efectivo" },
-  { value: "transferencia", label: "Transferencia" },
-];
-
 function onlyDigits(value: string) {
   return value.replace(/\D/g, "");
 }
@@ -28,18 +22,28 @@ function parseMoney(value: string) {
   return Number(normalized || 0);
 }
 
+function labelMetodo(value: string) {
+  return value
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 export default function ReservasApprovalGuard() {
   const [reservas, setReservas] = useState<ReservaLite[]>([]);
+  const [metodosPago, setMetodosPago] = useState<string[]>([]);
   const [selected, setSelected] = useState<ReservaLite | null>(null);
   const [valorAbonado, setValorAbonado] = useState("");
-  const [metodoPago, setMetodoPago] = useState<MedioPago | "">("");
+  const [metodoPago, setMetodoPago] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getReservas()
-      .then((data) => setReservas(Array.isArray(data) ? data : []))
-      .catch((e) => console.error("No se pudieron precargar las reservas para aprobación", e));
+    Promise.all([getReservas(), getMetodosPagoActivos()])
+      .then(([reservasData, metodosData]) => {
+        setReservas(Array.isArray(reservasData) ? reservasData : []);
+        setMetodosPago(Array.isArray(metodosData) ? metodosData : []);
+      })
+      .catch((e) => console.error("No se pudieron precargar los datos para aprobación", e));
   }, []);
 
   const reservaMap = useMemo(() => reservas, [reservas]);
@@ -48,8 +52,6 @@ export default function ReservasApprovalGuard() {
     const row = button.closest("tr");
     if (!row) return null;
 
-    // La primera columna de la tabla contiene el código real CH... de la reserva.
-    // Es el identificador visual más seguro y evita depender del plan o de la fecha.
     const codigo = row.querySelector("td:first-child")?.textContent?.trim() ?? "";
     if (codigo) {
       const byCode = reservaMap.find(
@@ -57,7 +59,6 @@ export default function ReservasApprovalGuard() {
       );
       if (byCode) return byCode;
 
-      // Compatibilidad con reservas antiguas que todavía se muestren como #ID.
       const legacyId = Number(codigo.replace(/\D/g, ""));
       if (codigo.startsWith("#") && legacyId) {
         const byId = reservaMap.find((r) => Number(r.id_reserva) === legacyId);
@@ -65,7 +66,6 @@ export default function ReservasApprovalGuard() {
       }
     }
 
-    // Respaldo para cualquier fila antigua: teléfono + estado pendiente.
     const phoneText = row.querySelector(".rv-phone")?.textContent ?? "";
     const phone = onlyDigits(phoneText);
     const candidates = reservaMap.filter(
@@ -147,61 +147,69 @@ export default function ReservasApprovalGuard() {
 
       {selected && (
         <div className="rv-overlay" onClick={closeModal}>
-          <div className="rv-modal rv-modal-sm" onClick={(e) => e.stopPropagation()}>
-            <div className="rv-modal-header">
+          <div className="rv-modal rv-approval-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="rv-modal-header rv-approval-header">
               <div>
+                <span className="rv-approval-eyebrow">Confirmación de reserva</span>
                 <h2>Aprobar reserva {selected.codigo_reserva || `#${selected.id_reserva}`}</h2>
-                <p style={{ margin: "4px 0 0", color: "#64748b", fontSize: 13 }}>
-                  Registra el abono recibido antes de confirmar la aprobación.
-                </p>
+                <p>Registra el abono recibido antes de confirmar la aprobación.</p>
               </div>
               <button className="rv-modal-close" onClick={closeModal} disabled={saving} aria-label="Cerrar">
                 <X size={20} />
               </button>
             </div>
 
-            <div className="rv-modal-body">
-              <div style={{ display: "grid", gap: 16 }}>
+            <div className="rv-modal-body rv-approval-body">
+              <div className="rv-approval-grid">
                 <div className="rv-form-group">
                   <label>Valor abonado *</label>
-                  <div style={{ position: "relative" }}>
-                    <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#64748b", fontWeight: 600 }}>$</span>
-                    <input type="text" inputMode="numeric" autoFocus value={valorAbonado}
+                  <div className="rv-money-input-wrap">
+                    <span>$</span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      autoFocus
+                      value={valorAbonado}
                       onChange={(e) => {
                         const digits = e.target.value.replace(/\D/g, "");
                         setValorAbonado(digits ? Number(digits).toLocaleString("es-CO") : "");
                         if (error) setError(null);
                       }}
-                      placeholder="0" style={{ paddingLeft: 28 }} disabled={saving} />
+                      placeholder="0"
+                      disabled={saving}
+                    />
                   </div>
                 </div>
 
                 <div className="rv-form-group">
                   <label>Método de pago del abono *</label>
-                  <select value={metodoPago}
+                  <select
+                    value={metodoPago}
                     onChange={(e) => {
-                      setMetodoPago(e.target.value as MedioPago | "");
+                      setMetodoPago(e.target.value);
                       if (error) setError(null);
-                    }} disabled={saving}>
+                    }}
+                    disabled={saving}
+                  >
                     <option value="">Seleccionar método de pago</option>
-                    {METODOS_PAGO.map((metodo) => (
-                      <option key={metodo.value} value={metodo.value}>{metodo.label}</option>
+                    {metodosPago.map((metodo) => (
+                      <option key={metodo} value={metodo}>{labelMetodo(metodo)}</option>
                     ))}
                   </select>
                 </div>
-
-                <div style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: 12, borderRadius: 10, background: "#f8fafc", border: "1px solid #e2e8f0", color: "#475569", fontSize: 13, lineHeight: 1.45 }}>
-                  <CreditCard size={17} style={{ flex: "0 0 auto", marginTop: 1 }} />
-                  <span>Al confirmar se guardarán el valor abonado, el método de pago y la fecha exacta de aprobación.</span>
-                </div>
-
-                {error && <div style={{ padding: "10px 12px", borderRadius: 8, background: "#fff1f2", color: "#be123c", fontSize: 13 }}>{error}</div>}
               </div>
+
+              <div className="rv-approval-note">
+                <div className="rv-approval-note-icon"><CreditCard size={18} /></div>
+                <span>Al confirmar se guardarán el valor abonado, el método de pago y la fecha exacta de aprobación.</span>
+              </div>
+
+              {error && <div className="rv-approval-error">{error}</div>}
             </div>
 
-            <div className="rv-modal-footer">
+            <div className="rv-modal-footer rv-approval-footer">
               <button className="rv-btn-cancel" onClick={closeModal} disabled={saving}>Cancelar</button>
-              <button className="rv-btn-save" onClick={aprobarReserva} disabled={saving}>
+              <button className="rv-btn-save rv-approval-save" onClick={aprobarReserva} disabled={saving}>
                 <CheckCircle2 size={16} /> {saving ? "Aprobando..." : "Confirmar aprobación"}
               </button>
             </div>
