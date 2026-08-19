@@ -8,6 +8,16 @@ import {
 } from "../services/medioPago.service";
 import "../styles/crear.css";
 
+function friendlyError(message: string) {
+  const text = message.toLowerCase();
+  if (text.includes("no tienes permisos")) return "No tienes permisos para administrar los métodos de pago.";
+  if (text.includes("ya existe")) return message;
+  if (text.includes("cannot be performed on relation") || text.includes("alter column")) {
+    return "No fue posible eliminar el método de pago con la configuración anterior. Ejecuta la actualización SQL indicada para habilitar la eliminación segura.";
+  }
+  return message;
+}
+
 export default function CrearPage() {
   const [items, setItems] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -23,7 +33,7 @@ export default function CrearPage() {
     try {
       setItems(await getMetodosPago());
     } catch (e: any) {
-      setError(e?.message || "No fue posible cargar los métodos de pago.");
+      setError(friendlyError(e?.message || "No fue posible cargar los métodos de pago."));
     } finally {
       setLoading(false);
     }
@@ -41,7 +51,7 @@ export default function CrearPage() {
       setNuevo("");
       await load();
     } catch (e: any) {
-      setError(e?.message || "No fue posible crear el método de pago.");
+      setError(friendlyError(e?.message || "No fue posible crear el método de pago."));
     } finally {
       setSaving(false);
     }
@@ -57,21 +67,21 @@ export default function CrearPage() {
       setEditValue("");
       await load();
     } catch (e: any) {
-      setError(e?.message || "No fue posible renombrar el método de pago.");
+      setError(friendlyError(e?.message || "No fue posible renombrar el método de pago."));
     } finally {
       setSaving(false);
     }
   };
 
   const remove = async (value: string) => {
-    if (!confirm(`¿Eliminar el método de pago “${value}”?`)) return;
+    if (!confirm(`¿Quitar “${value}” de los métodos disponibles?`)) return;
     setSaving(true);
     setError(null);
     try {
       await deleteMetodoPago(value);
       await load();
     } catch (e: any) {
-      setError(e?.message || "No fue posible eliminar el método de pago.");
+      setError(friendlyError(e?.message || "No fue posible quitar el método de pago."));
     } finally {
       setSaving(false);
     }
@@ -83,7 +93,7 @@ export default function CrearPage() {
         <div>
           <span className="crear-eyebrow">Configuración administrativa</span>
           <h1>Crear</h1>
-          <p>Administra los valores disponibles del enum <strong>medio_pago</strong>.</p>
+          <p>Administra los métodos de pago disponibles para reservas y pagos.</p>
         </div>
         <button className="crear-btn secondary" onClick={load} disabled={loading || saving}>
           <RefreshCw size={16} /> Actualizar
@@ -96,7 +106,7 @@ export default function CrearPage() {
         <section className="crear-card crear-create-card">
           <div className="crear-card-title">
             <div className="crear-icon"><Plus size={20} /></div>
-            <div><h2>Nuevo método de pago</h2><p>El valor quedará disponible en reservas y pagos.</p></div>
+            <div><h2>Nuevo método de pago</h2><p>El nuevo valor quedará disponible para futuras operaciones.</p></div>
           </div>
           <div className="crear-form-row">
             <input value={nuevo} onChange={e => setNuevo(e.target.value)} placeholder="Ej. tarjeta" onKeyDown={e => { if (e.key === "Enter") add(); }} />
@@ -107,19 +117,19 @@ export default function CrearPage() {
 
         <section className="crear-card crear-summary-card">
           <div className="crear-summary-icon"><CreditCard size={23} /></div>
-          <div><span>Métodos configurados</span><strong>{items.length}</strong></div>
+          <div><span>Métodos disponibles</span><strong>{items.length}</strong></div>
         </section>
       </div>
 
       <section className="crear-card crear-list-card">
         <div className="crear-list-head">
-          <div><h2>Métodos de pago</h2><p>Valores actuales del enum <code>public.medio_pago</code>.</p></div>
+          <div><h2>Métodos de pago</h2><p>Valores disponibles actualmente para el sistema.</p></div>
         </div>
 
         {loading ? (
           <div className="crear-empty">Cargando métodos de pago…</div>
         ) : items.length === 0 ? (
-          <div className="crear-empty">No hay métodos de pago configurados.</div>
+          <div className="crear-empty">No hay métodos de pago disponibles.</div>
         ) : (
           <div className="crear-table-wrap">
             <table className="crear-table">
@@ -144,7 +154,7 @@ export default function CrearPage() {
                         ) : (
                           <>
                             <button className="crear-action" title="Renombrar" onClick={() => { setEditing(item); setEditValue(item); }}><Pencil size={15} /></button>
-                            <button className="crear-action danger" title="Eliminar" onClick={() => remove(item)} disabled={saving}><Trash2 size={15} /></button>
+                            <button className="crear-action danger" title="Quitar de disponibles" onClick={() => remove(item)} disabled={saving}><Trash2 size={15} /></button>
                           </>
                         )}
                       </div>
