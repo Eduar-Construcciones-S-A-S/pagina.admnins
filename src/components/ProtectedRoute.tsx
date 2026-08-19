@@ -2,8 +2,6 @@ import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 
-const DEMO_SESSION_KEY = "forigua:demo_session";
-
 type Props = {
   children: React.ReactNode;
 };
@@ -14,14 +12,6 @@ function ProtectedRoute({ children }: Props) {
 
   useEffect(() => {
     const checkSession = async () => {
-      const demoRaw = localStorage.getItem(DEMO_SESSION_KEY);
-
-      if (demoRaw) {
-        setIsAuth(true);
-        setLoading(false);
-        return;
-      }
-
       if (!isSupabaseConfigured || !supabase) {
         setIsAuth(false);
         setLoading(false);
@@ -36,14 +26,13 @@ function ProtectedRoute({ children }: Props) {
         return;
       }
 
-      // Verificar si el correo está confirmado
       if (data.session.user && !data.session.user.email_confirmed_at) {
         await supabase.auth.signOut();
         setIsAuth(false);
       } else {
         setIsAuth(true);
       }
-      
+
       setLoading(false);
     };
 
