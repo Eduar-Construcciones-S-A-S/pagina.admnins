@@ -22,7 +22,6 @@ import {
   Settings2,
 } from "lucide-react";
 
-const DEMO_SESSION_KEY = "forigua:demo_session";
 const SIDEBAR_KEY = "checua:sidebar_collapsed";
 const INACTIVITY_LIMIT_MS = 15 * 60 * 1000;
 
@@ -71,7 +70,6 @@ function Dashboard() {
 
   const cerrarSesion = async (porInactividad = false) => {
     await logout();
-    localStorage.removeItem(DEMO_SESSION_KEY);
     navigate("/", { replace: true, state: porInactividad ? { motivo: "inactividad" } : undefined });
   };
 
@@ -97,6 +95,7 @@ function Dashboard() {
       .then((current) => {
         if (!current) {
           setRole(null);
+          navigate("/", { replace: true });
           return;
         }
         setRole(current.role);
@@ -105,7 +104,10 @@ function Dashboard() {
           navigate("/app/reservas", { replace: true });
         }
       })
-      .catch(() => setRole(null))
+      .catch(() => {
+        setRole(null);
+        navigate("/", { replace: true });
+      })
       .finally(() => setRoleLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
