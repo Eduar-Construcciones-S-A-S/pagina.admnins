@@ -75,9 +75,14 @@ export async function getControlOperativo(): Promise<ControlOperativoRow[]> {
 
   for (const r of reservas as any[]) {
     const plan = planMap.get(Number(r.id_plan));
-    const fecha = fechaMap.get(Number(r.id_fecha));
-    const hora = horaMap.get(Number(r.id_hora));
+    const fechaRelacionada = fechaMap.get(Number(r.id_fecha));
+    const horaRelacionada = horaMap.get(Number(r.id_hora));
     const personas = participantesPorReserva.get(Number(r.id_reserva)) ?? [null];
+
+    // La reserva es la fuente de verdad. Si el esquema actual guarda solo el id,
+    // se resuelve contra plan_fechas / plan_horas como respaldo.
+    const fechaReserva = text(r.fecha_reserva || r.fecha || fechaRelacionada?.fecha);
+    const horaReserva = text(r.hora_reserva || r.hora || horaRelacionada?.hora);
 
     const cantidadPersonas = r.cantidad_personas == null
       ? personas.filter(Boolean).length
@@ -103,8 +108,8 @@ export async function getControlOperativo(): Promise<ControlOperativoRow[]> {
         id_plan: r.id_plan == null ? null : Number(r.id_plan),
         id_hora: r.id_hora == null ? null : Number(r.id_hora),
         plan: text(plan?.nombre_plan),
-        fecha: text(fecha?.fecha),
-        hora: text(hora?.hora),
+        fecha: fechaReserva,
+        hora: horaReserva,
         aprobado: r.aprobado ?? null,
         nombre: text(p?.nombre),
         edad: p?.edad == null ? null : Number(p.edad),
