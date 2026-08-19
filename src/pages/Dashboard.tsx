@@ -19,6 +19,7 @@ import {
   ClipboardList,
   ChevronLeft,
   ChevronRight,
+  Settings2,
 } from "lucide-react";
 
 const DEMO_SESSION_KEY = "forigua:demo_session";
@@ -32,6 +33,7 @@ const ALL_NAV_LINKS = [
   { to: "/app/planes", label: "Planes", icon: <Package size={16} />, roles: ["administrador"] as AppRole[] },
   { to: "/app/clientes", label: "Clientes", icon: <Users size={16} />, roles: ["administrador"] as AppRole[] },
   { to: "/app/participantes", label: "Participantes", icon: <UserCheck size={16} />, roles: ["administrador"] as AppRole[] },
+  { to: "/app/crear", label: "Crear", icon: <Settings2 size={16} />, roles: ["administrador"] as AppRole[] },
 ];
 
 function Dashboard() {
