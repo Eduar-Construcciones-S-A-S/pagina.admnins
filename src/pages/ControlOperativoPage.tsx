@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Download, Eye, Filter, Pencil, RefreshCw, Search, SlidersHorizontal, X } from "lucide-react";
 import { getControlOperativo, updateControlParticipante, updateControlReserva, type ControlOperativoRow } from "../services/controlOperativo.service";
 import { getMetodosPagoActivos } from "../services/medioPago.service";
+import { getRestaurantesActivos } from "../services/restaurante.service";
 import "../styles/control-operativo.css";
 
 const money = (value: number) => `$${Number(value || 0).toLocaleString("es-CO")}`;
@@ -32,6 +33,7 @@ function exportExcel(rows: ControlOperativoRow[]) {
 export default function ControlOperativoPage() {
   const [rows, setRows] = useState<ControlOperativoRow[]>([]);
   const [metodosPago, setMetodosPago] = useState<string[]>([]);
+  const [restaurantes, setRestaurantes] = useState<string[]>([]);
   const [loading, setLoading] = useState(true); const [refreshing, setRefreshing] = useState(false); const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState(""); const [fecha, setFecha] = useState(""); const [plan, setPlan] = useState(""); const [hora, setHora] = useState("");
   const [mina, setMina] = useState(""); const [refrigerio, setRefrigerio] = useState(""); const [almuerzo, setAlmuerzo] = useState("");
@@ -40,9 +42,14 @@ export default function ControlOperativoPage() {
   const load = useCallback(async (silent = false) => {
     silent ? setRefreshing(true) : setLoading(true); setError(null);
     try {
-      const [operativo, pagos] = await Promise.all([getControlOperativo(), getMetodosPagoActivos()]);
+      const [operativo, pagos, restaurantesData] = await Promise.all([
+        getControlOperativo(),
+        getMetodosPagoActivos(),
+        getRestaurantesActivos(),
+      ]);
       setRows(operativo);
       setMetodosPago(pagos);
+      setRestaurantes(restaurantesData);
     } catch (e: any) { setError(e?.message || "No fue posible cargar el control operativo."); }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
@@ -140,7 +147,7 @@ export default function ControlOperativoPage() {
       <label>Plan<select value={editing.id_plan ?? ""} onChange={e => { const id = e.target.value ? Number(e.target.value) : null; const name = planOptions.find(([optionId]) => optionId === id)?.[1] || ""; setEditing({ ...editing, id_plan: id, plan: name }); }}><option value="">Sin plan</option>{planOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label>
       <label>Hora<select value={editing.id_hora ?? ""} onChange={e => { const id = e.target.value ? Number(e.target.value) : null; const value = hourOptions.find(([optionId]) => optionId === id)?.[1] || ""; setEditing({ ...editing, id_hora: id, hora: value }); }}><option value="">Sin hora</option>{hourOptions.map(([id, value]) => <option key={id} value={id}>{normalizeHour(value)}</option>)}</select></label>
       <label>Nombre<input value={editing.nombre} onChange={e => setEditing({ ...editing, nombre: e.target.value })} /></label><label>Edad<input type="number" value={editing.edad ?? ""} onChange={e => setEditing({ ...editing, edad: e.target.value ? Number(e.target.value) : null })} /></label><label>Nacionalidad<input value={editing.nacionalidad} onChange={e => setEditing({ ...editing, nacionalidad: e.target.value })} /></label><label>Documento<input value={editing.documento} onChange={e => setEditing({ ...editing, documento: e.target.value })} /></label><label>Contacto<input value={editing.contacto} onChange={e => setEditing({ ...editing, contacto: e.target.value })} /></label>
-      <label>Restaurante<input value={editing.restaurante} onChange={e => setEditing({ ...editing, restaurante: e.target.value })} placeholder="Nombre o referencia del restaurante" /></label><label>Almuerzo<input value={editing.almuerzo} onChange={e => setEditing({ ...editing, almuerzo: e.target.value })} placeholder="Opcional" /></label><label>Total<input type="number" value={editing.total} onChange={e => setEditing({ ...editing, total: Number(e.target.value) })} /></label><label>Abono<input type="number" value={editing.abono} onChange={e => setEditing({ ...editing, abono: Number(e.target.value) })} /></label>
+      <label>Restaurante<select value={editing.restaurante || ""} onChange={e => setEditing({ ...editing, restaurante: e.target.value })}><option value="">Sin restaurante</option>{editing.restaurante && !restaurantes.includes(editing.restaurante) && <option value={editing.restaurante}>{editing.restaurante} (histórico)</option>}{restaurantes.map(r => <option key={r} value={r}>{r}</option>)}</select></label><label>Almuerzo<input value={editing.almuerzo} onChange={e => setEditing({ ...editing, almuerzo: e.target.value })} placeholder="Opcional" /></label><label>Total<input type="number" value={editing.total} onChange={e => setEditing({ ...editing, total: Number(e.target.value) })} /></label><label>Abono<input type="number" value={editing.abono} onChange={e => setEditing({ ...editing, abono: Number(e.target.value) })} /></label>
       <label>Medio abono<select value={editing.medio_abono || ""} onChange={e => setEditing({ ...editing, medio_abono: e.target.value })}><option value="">Sin método</option>{editing.medio_abono && !metodosPago.includes(editing.medio_abono) && <option value={editing.medio_abono}>{editing.medio_abono} (histórico)</option>}{metodosPago.map(m => <option key={m} value={m}>{m}</option>)}</select></label>
       <label>Pago saldo<input type="number" value={editing.pago_saldo} onChange={e => setEditing({ ...editing, pago_saldo: Number(e.target.value) })} /></label>
       <label>Medio saldo<select value={editing.medio_saldo || ""} onChange={e => setEditing({ ...editing, medio_saldo: e.target.value })}><option value="">Sin método</option>{editing.medio_saldo && !metodosPago.includes(editing.medio_saldo) && <option value={editing.medio_saldo}>{editing.medio_saldo} (histórico)</option>}{metodosPago.map(m => <option key={m} value={m}>{m}</option>)}</select></label>
