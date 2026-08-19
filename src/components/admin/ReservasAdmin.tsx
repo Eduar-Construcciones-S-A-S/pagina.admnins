@@ -9,8 +9,6 @@ import {
   createCliente,
   getParticipantesPorReserva,
   createParticipante,
-  updateParticipante,
-  deleteParticipante,
 } from "../../services/api.service";
 import {
   Plus, Eye, Pencil, Trash2, Search, X,
@@ -72,7 +70,7 @@ const emptyParticipant = (): NuevoParticipante => ({
 const emptyForm = {
   telefono_cliente: "",
   id_plan: "" as number | "",
-  cantidad_personas: 1 as number,
+  cantidad_personas: 1,
   aprobado: false,
 };
 
@@ -176,7 +174,6 @@ export default function ReservasAdmin() {
   const validateCreate = () => {
     if (formData.id_plan === "") return "Selecciona un plan.";
     if (!formData.telefono_cliente.trim()) return "El teléfono del cliente es obligatorio.";
-    if (newParticipants.length !== formData.cantidad_personas) return "La cantidad de participantes no coincide.";
     for (let i = 0; i < newParticipants.length; i++) {
       const p = newParticipants[i];
       if (!p.nombre.trim()) return `Falta el nombre del participante ${i + 1}.`;
@@ -191,8 +188,9 @@ export default function ReservasAdmin() {
     setFormError(null);
     setSaving(true);
     try {
-      let fecha_aprobacion: string | null = null;
-      if (formData.aprobado) fecha_aprobacion = editing?.fecha_aprobacion ?? new Date().toISOString();
+      const fecha_aprobacion = formData.aprobado
+        ? (editing?.fecha_aprobacion ?? new Date().toISOString())
+        : null;
 
       if (editing) {
         await updateReserva(editing.id_reserva, {
@@ -214,7 +212,7 @@ export default function ReservasAdmin() {
           await createCliente({
             telefono: clientPhone,
             atencion_humana: true,
-            etapaconversacion: "reserva_manual",
+            etapaconversacion: "saludo",
             id_plan: Number(formData.id_plan),
           });
         }
@@ -307,7 +305,7 @@ export default function ReservasAdmin() {
 
       <div className="rv-filter-bar">
         <div className="rv-search-wrap"><Search size={15} className="rv-search-icon" /><input className="rv-search-input" placeholder="Buscar código, teléfono o plan..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} /></div>
-        <div className="rv-filter-group"><span className="rv-filter-label">Estado:</span><select className="rv-filter-select" value={estadoFilter} onChange={(e) => { setEstadoFilter(e.target.value as any); setPage(1); }}><option value="todos">Todos</option><option value="aprobado">Aprobado</option><option value="pendiente">Pendiente</option></select></div>
+        <div className="rv-filter-group"><span className="rv-filter-label">Estado:</span><select className="rv-filter-select" value={estadoFilter} onChange={(e) => { setEstadoFilter(e.target.value as "todos" | "aprobado" | "pendiente"); setPage(1); }}><option value="todos">Todos</option><option value="aprobado">Aprobado</option><option value="pendiente">Pendiente</option></select></div>
         <button className="rv-clear-btn" onClick={() => { setSearch(""); setEstadoFilter("todos"); setPage(1); }}><X size={14} /> Limpiar</button>
         <span className="rv-filter-label">Filas:</span><select className="rv-filter-select" value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}>{PAGE_SIZE_OPTIONS.map((n) => <option key={n}>{n}</option>)}</select>
       </div>
