@@ -3,7 +3,6 @@ import { supabase } from "../lib/supabase";
 import { Eye, EyeOff, User, Lock, ArrowRight, ShieldCheck, Mountain } from "lucide-react";
 import "../styles/login.css";
 
-const DEMO_SESSION_KEY = "forigua:demo_session";
 const REMEMBER_ME_KEY = "forigua:remember_me";
 const SAVED_EMAIL_KEY = "forigua:saved_email";
 
@@ -37,11 +36,10 @@ function Login() {
         return;
       }
 
-      const { data, error: supabaseError } =
-        await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
+      const { data, error: supabaseError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
       if (supabaseError) {
         setError("Credenciales incorrectas.");
@@ -62,11 +60,6 @@ function Login() {
           localStorage.removeItem(SAVED_EMAIL_KEY);
           localStorage.removeItem(REMEMBER_ME_KEY);
         }
-
-        localStorage.setItem(
-          DEMO_SESSION_KEY,
-          JSON.stringify({ email })
-        );
 
         window.location.href = "/app";
       }
@@ -115,16 +108,11 @@ function Login() {
   return (
     <div className="login-screen">
       <div className="login-layout">
-        {/* Panel lateral con textos descriptivos */}
         <div className="login-side">
           <img src="/logo.png" alt="Logo Checua" className="login-logo-main" />
           <h2 className="login-side-title">Desierto de Checua</h2>
-          <div className="login-ornament">
-            <Mountain size={24} />
-          </div>
-          <p className="login-side-subtitle">
-            Portal de Gestión Administrativa y Conservación Ambiental.
-          </p>
+          <div className="login-ornament"><Mountain size={24} /></div>
+          <p className="login-side-subtitle">Portal de Gestión Administrativa y Conservación Ambiental.</p>
           <div className="login-ornament">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-cactus">
               <path d="M8 22V8a2 2 0 0 1 2-2h0a2 2 0 0 1 2 2v14"/>
@@ -132,12 +120,9 @@ function Login() {
               <path d="M8 10H6a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h0"/>
             </svg>
           </div>
-          <p className="login-footer-text">
-            Cuidamos nuestro patrimonio, protegemos el futuro.
-          </p>
+          <p className="login-footer-text">Cuidamos nuestro patrimonio, protegemos el futuro.</p>
         </div>
 
-        {/* Formulario de Login */}
         <div className="login-main">
           <form className="login-card" onSubmit={handleLogin}>
             <div className="login-card-header">
@@ -146,9 +131,7 @@ function Login() {
               <p className="login-desc">Ingresa a tu cuenta para continuar</p>
             </div>
 
-            <div className="login-separator">
-              <div className="login-separator-diamond"></div>
-            </div>
+            <div className="login-separator"><div className="login-separator-diamond"></div></div>
 
             {error && <div className="login-error">{error}</div>}
             {message && <div className="login-message">{message}</div>}
@@ -157,15 +140,7 @@ function Login() {
               <label htmlFor="email">Usuario</label>
               <div className="login-input-wrapper">
                 <User size={18} className="login-input-icon" />
-                <input
-                  id="email"
-                  type="email"
-                  autoComplete="email"
-                  value={email}
-                  onChange={(e) => { setEmail(e.target.value); if (error) setError(null); if (message) setMessage(null); }}
-                  placeholder="nombre.apellido@ejemplo.com"
-                  required
-                />
+                <input id="email" type="email" autoComplete="email" value={email} onChange={(e) => { setEmail(e.target.value); if (error) setError(null); if (message) setMessage(null); }} placeholder="nombre.apellido@ejemplo.com" required />
               </div>
             </div>
 
@@ -174,21 +149,8 @@ function Login() {
               <div className="login-password-wrap">
                 <div className="login-input-wrapper">
                   <Lock size={18} className="login-input-icon" />
-                  <input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    autoComplete="current-password"
-                    value={password}
-                    onChange={(e) => { setPassword(e.target.value); if (error) setError(null); if (message) setMessage(null); }}
-                    placeholder="••••••••"
-                    required={!message}
-                  />
-                  <button
-                    type="button"
-                    className="login-eye"
-                    onClick={() => setShowPassword((s) => !s)}
-                    aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
-                  >
+                  <input id="password" type={showPassword ? "text" : "password"} autoComplete="current-password" value={password} onChange={(e) => { setPassword(e.target.value); if (error) setError(null); if (message) setMessage(null); }} placeholder="••••••••" required={!message} />
+                  <button type="button" className="login-eye" onClick={() => setShowPassword((s) => !s)} aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}>
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
@@ -197,36 +159,19 @@ function Login() {
 
             <div className="login-options">
               <label className="login-remember">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                />
+                <input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} />
                 <span>Recordarme</span>
               </label>
-              <button
-                type="button"
-                className="login-forgot-link"
-                onClick={handleForgotPassword}
-                disabled={loading}
-              >
-                ¿Olvidó su contraseña?
-              </button>
+              <button type="button" className="login-forgot-link" onClick={handleForgotPassword} disabled={loading}>¿Olvidó su contraseña?</button>
             </div>
 
             <button type="submit" className="login-submit" disabled={loading}>
-              {loading ? "Ingresando..." : (
-                <>
-                  Iniciar Sesión <ArrowRight size={18} />
-                </>
-              )}
+              {loading ? "Ingresando..." : <>Iniciar Sesión <ArrowRight size={18} /></>}
             </button>
 
             <div className="login-card-footer">
               <ShieldCheck size={20} className="login-footer-icon" />
-              <p className="login-footer-desc">
-                Seguridad, gestión y conservación al servicio de nuestro desierto.
-              </p>
+              <p className="login-footer-desc">Seguridad, gestión y conservación al servicio de nuestro desierto.</p>
             </div>
           </form>
         </div>
