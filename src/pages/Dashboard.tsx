@@ -6,7 +6,7 @@ import "../styles/desktop-admin-tuning.css";
 import "../styles/sidebar-admin.css";
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { logout } from "../services/auth.service";
-import { supabase } from "../lib/supabase";
+import { getCurrentRole, type AppRole } from "../services/role.service";
 import {
   CalendarDays,
   Package,
@@ -25,23 +25,27 @@ const DEMO_SESSION_KEY = "forigua:demo_session";
 const SIDEBAR_KEY = "checua:sidebar_collapsed";
 const INACTIVITY_LIMIT_MS = 15 * 60 * 1000;
 
-const NAV_LINKS = [
-  { to: "/app", label: "Resumen", icon: <LayoutDashboard size={16} />, end: true },
-  { to: "/app/reservas", label: "Reservas", icon: <CalendarDays size={16} /> },
-  { to: "/app/control-operativo", label: "Control Operativo", icon: <ClipboardList size={16} /> },
-  { to: "/app/planes", label: "Planes", icon: <Package size={16} /> },
-  { to: "/app/clientes", label: "Clientes", icon: <Users size={16} /> },
-  { to: "/app/participantes", label: "Participantes", icon: <UserCheck size={16} /> },
+const ALL_NAV_LINKS = [
+  { to: "/app", label: "Resumen", icon: <LayoutDashboard size={16} />, end: true, roles: ["administrador"] as AppRole[] },
+  { to: "/app/reservas", label: "Reservas", icon: <CalendarDays size={16} />, roles: ["administrador", "atencion"] as AppRole[] },
+  { to: "/app/control-operativo", label: "Control Operativo", icon: <ClipboardList size={16} />, roles: ["administrador", "atencion"] as AppRole[] },
+  { to: "/app/planes", label: "Planes", icon: <Package size={16} />, roles: ["administrador"] as AppRole[] },
+  { to: "/app/clientes", label: "Clientes", icon: <Users size={16} />, roles: ["administrador"] as AppRole[] },
+  { to: "/app/participantes", label: "Participantes", icon: <UserCheck size={16} />, roles: ["administrador"] as AppRole[] },
 ];
 
 function Dashboard() {
-  const [userLabel, setUserLabel] = useState<string>("admin");
+  const [userLabel, setUserLabel] = useState<string>("usuario");
+  const [role, setRole] = useState<AppRole | null>(null);
+  const [roleLoading, setRoleLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem(SIDEBAR_KEY) === "true");
   const navigate = useNavigate();
   const location = useLocation();
   const drawerRef = useRef<HTMLDivElement>(null);
   const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const navLinks = role ? ALL_NAV_LINKS.filter((link) => link.roles.includes(role)) : [];
 
   useEffect(() => { setMenuOpen(false); }, [location.pathname]);
 
@@ -87,23 +91,30 @@ function Dashboard() {
   }, []);
 
   useEffect(() => {
-    const demoRaw = localStorage.getItem(DEMO_SESSION_KEY);
-    if (demoRaw) {
-      try {
-        const parsed = JSON.parse(demoRaw) as { email?: string };
-        setUserLabel(parsed.email?.trim() || "demo@forigua.local");
-      } catch { setUserLabel("demo@forigua.local"); }
-      return;
-    }
-    if (!supabase) return;
-    supabase.auth.getUser().then(({ data }) => {
-      const email = data.user?.email?.trim();
-      if (email) setUserLabel(email);
-    });
+    getCurrentRole()
+      .then((current) => {
+        if (!current) {
+          setRole(null);
+          return;
+        }
+        setRole(current.role);
+        setUserLabel(current.email || "usuario");
+        if (current.role === "atencion" && location.pathname === "/app") {
+          navigate("/app/reservas", { replace: true });
+        }
+      })
+      .catch(() => setRole(null))
+      .finally(() => setRoleLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const linkClass = ({ isActive }: { isActive: boolean }) => ["dash-nav-link", isActive ? "active" : ""].join(" ");
   const sidebarLinkClass = ({ isActive }: { isActive: boolean }) => ["sidebar-link", isActive ? "active" : ""].join(" ");
+  const roleLabel = role === "atencion" ? "Atención" : "Administrador";
+
+  if (roleLoading) {
+    return <div className="grid min-h-screen place-items-center"><p>Cargando permisos…</p></div>;
+  }
 
   return (
     <div className="dash-root">
@@ -117,49 +128,32 @@ function Dashboard() {
             </div>
           </div>
 
-          <button
-            className="sidebar-collapse-btn"
-            onClick={() => setSidebarCollapsed((value) => !value)}
-            aria-label={sidebarCollapsed ? "Expandir menú" : "Contraer menú"}
-            title={sidebarCollapsed ? "Expandir menú" : "Contraer menú"}
-          >
+          <button className="sidebar-collapse-btn" onClick={() => setSidebarCollapsed((value) => !value)} aria-label={sidebarCollapsed ? "Expandir menú" : "Contraer menú"} title={sidebarCollapsed ? "Expandir menú" : "Contraer menú"}>
             {sidebarCollapsed ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
           </button>
 
           <nav className="sidebar-nav">
-            {NAV_LINKS.map((l) => (
+            {navLinks.map((l) => (
               <NavLink key={l.to} to={l.to} end={l.end} className={sidebarLinkClass} title={sidebarCollapsed ? l.label : undefined}>
-                {l.icon}
-                <span className="sidebar-link-label">{l.label}</span>
+                {l.icon}<span className="sidebar-link-label">{l.label}</span>
               </NavLink>
             ))}
           </nav>
 
           <div className="sidebar-footer">
             <div className="sidebar-user">
-              <div className="sidebar-avatar">{userLabel[0]?.toUpperCase() ?? "A"}</div>
-              <div className="sidebar-user-copy">
-                <span>Administrador</span>
-                <span>{userLabel}</span>
-              </div>
+              <div className="sidebar-avatar">{userLabel[0]?.toUpperCase() ?? "U"}</div>
+              <div className="sidebar-user-copy"><span>{roleLabel}</span><span>{userLabel}</span></div>
             </div>
-            <button onClick={handleLogout} className="sidebar-logout" title="Cerrar sesión">
-              <LogOut size={17} />
-              <span>Cerrar sesión</span>
-            </button>
+            <button onClick={handleLogout} className="sidebar-logout" title="Cerrar sesión"><LogOut size={17} /><span>Cerrar sesión</span></button>
           </div>
         </aside>
 
         <div className="dash-content">
           <header className="dash-header">
             <div className="dash-header-inner">
-              <div className="dash-brand">
-                <div className="dash-brand-icon"><img src="/icono.png" alt="Icono Checua" /></div>
-                <span className="dash-brand-name">Desierto de Checua</span>
-              </div>
-              <nav className="dash-nav-desktop">
-                {NAV_LINKS.map((l) => <NavLink key={l.to} to={l.to} end={l.end} className={linkClass}>{l.icon}{l.label}</NavLink>)}
-              </nav>
+              <div className="dash-brand"><div className="dash-brand-icon"><img src="/icono.png" alt="Icono Checua" /></div><span className="dash-brand-name">Desierto de Checua</span></div>
+              <nav className="dash-nav-desktop">{navLinks.map((l) => <NavLink key={l.to} to={l.to} end={l.end} className={linkClass}>{l.icon}{l.label}</NavLink>)}</nav>
               <div className="dash-header-actions">
                 <button onClick={handleLogout} className="dash-logout-btn dash-logout-desktop" title="Cerrar sesión"><LogOut size={16} /><span className="dash-logout-label">Cerrar sesión</span></button>
                 <button className="dash-hamburger" onClick={() => setMenuOpen(true)} aria-label="Abrir menú"><Menu size={22} /></button>
@@ -170,16 +164,12 @@ function Dashboard() {
           {menuOpen && <div className="drawer-backdrop" />}
           <div ref={drawerRef} className={`drawer ${menuOpen ? "drawer-open" : ""}`}>
             <div className="drawer-top"><button className="drawer-close" onClick={() => setMenuOpen(false)} aria-label="Cerrar menú"><X size={20} /></button></div>
-            <div className="drawer-user"><div className="drawer-avatar">{userLabel[0]?.toUpperCase() ?? "A"}</div><span className="drawer-email">{userLabel}</span></div>
-            <nav className="drawer-nav">
-              {NAV_LINKS.map((l) => <NavLink key={l.to} to={l.to} end={l.end} className={linkClass}>{l.icon}{l.label}</NavLink>)}
-            </nav>
+            <div className="drawer-user"><div className="drawer-avatar">{userLabel[0]?.toUpperCase() ?? "U"}</div><span className="drawer-email">{roleLabel} · {userLabel}</span></div>
+            <nav className="drawer-nav">{navLinks.map((l) => <NavLink key={l.to} to={l.to} end={l.end} className={linkClass}>{l.icon}{l.label}</NavLink>)}</nav>
             <button onClick={handleLogout} className="drawer-logout"><LogOut size={16} />Cerrar sesión</button>
           </div>
 
-          <main className="dash-main">
-            <Outlet />
-          </main>
+          <main className="dash-main"><Outlet /></main>
         </div>
       </div>
     </div>
