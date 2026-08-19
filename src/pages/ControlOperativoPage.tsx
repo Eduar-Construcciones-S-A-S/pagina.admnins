@@ -21,6 +21,13 @@ const money = (value: number) => `$${Number(value || 0).toLocaleString("es-CO")}
 const yesNo = (value: boolean | null) => (value ? "SI" : "NO");
 const normalizeHour = (value: string) => value ? value.slice(0, 5) : "—";
 const normalizePhone = (value: string) => String(value || "").replace(/\D/g, "");
+const normalizeText = (value: unknown) => String(value ?? "").trim().toLowerCase();
+const formatDate = (value: string) => {
+  if (!value) return "—";
+  const dateOnly = value.slice(0, 10);
+  const [year, month, day] = dateOnly.split("-");
+  return year && month && day ? `${day}/${month}/${year}` : value;
+};
 const esc = (value: unknown) => String(value ?? "")
   .replaceAll("&", "&amp;")
   .replaceAll("<", "&lt;")
@@ -29,11 +36,10 @@ const esc = (value: unknown) => String(value ?? "")
 
 function exportExcel(rows: ControlOperativoRow[]) {
   const columns: [string, (r: ControlOperativoRow) => unknown][] = [
-    ["Reserva", r => r.reserva_codigo], ["Ruta/Plan", r => r.plan], ["Nombre", r => r.nombre],
-    ["Edad", r => r.edad ?? ""], ["Nacionalidad", r => r.nacionalidad], ["Documento", r => r.documento],
-    ["Contacto", r => r.contacto], ["Cantidad", r => r.cantidad ?? ""], ["Hora", r => normalizeHour(r.hora)],
-    ["Mina", r => yesNo(r.mina)], ["Refrigerio", r => yesNo(r.refrigerio)], ["Restaurante", r => r.restaurante],
-    ["Almuerzo", r => r.almuerzo], ["Total", r => r.total], ["Abono", r => r.abono],
+    ["Código reserva", r => r.reserva_codigo], ["Ruta/Plan", r => r.plan], ["Fecha reserva", r => formatDate(r.fecha)], ["Horario", r => normalizeHour(r.hora)],
+    ["Nombre", r => r.nombre], ["Edad", r => r.edad ?? ""], ["Nacionalidad", r => r.nacionalidad], ["Documento", r => r.documento],
+    ["Contacto", r => r.contacto], ["Cantidad", r => r.cantidad ?? ""], ["Mina", r => yesNo(r.mina)], ["Refrigerio", r => yesNo(r.refrigerio)],
+    ["Restaurante", r => r.restaurante], ["Almuerzo", r => r.almuerzo], ["Total", r => r.total], ["Abono", r => r.abono],
     ["Medio Abono", r => r.medio_abono], ["Pago Saldo", r => r.pago_saldo], ["Medio Saldo", r => r.medio_saldo],
     ["Saldo Pendiente", r => r.saldo_pendiente], ["Observación", r => r.observacion],
   ];
@@ -83,13 +89,17 @@ export default function ControlOperativoPage() {
   const hourOptions = useMemo(() => [...new Map(rows.filter(r => r.id_hora != null).map(r => [r.id_hora as number, r.hora])).entries()], [rows]);
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = normalizeText(search);
     const result = rows.filter(r => {
       if (fecha && r.fecha !== fecha) return false;
       if (plan && r.plan !== plan) return false;
       if (hora && r.hora !== hora) return false;
       if (q) {
-        const haystack = [r.reserva_codigo, r.plan, r.nombre, r.documento, r.contacto, r.nacionalidad, r.observacion, r.restaurante, r.almuerzo].join(" ").toLowerCase();
+        const haystack = [
+          r.reserva_codigo, r.plan, r.fecha, formatDate(r.fecha), normalizeHour(r.hora),
+          r.nombre, r.documento, r.contacto, r.nacionalidad, r.observacion,
+          r.restaurante, r.almuerzo,
+        ].map(normalizeText).join(" ");
         if (!haystack.includes(q)) return false;
       }
       return true;
@@ -132,7 +142,6 @@ export default function ControlOperativoPage() {
         const participantPhone = normalizePhone(editing.contacto) && normalizePhone(editing.contacto) !== normalizePhone(editing.contacto_cliente)
           ? editing.contacto.trim()
           : null;
-
         await updateControlParticipante(editing.id_participante, {
           nombre: editing.nombre || null,
           edad: editing.edad,
@@ -142,7 +151,6 @@ export default function ControlOperativoPage() {
           tipo_almuerzo: editing.almuerzo.trim() || null,
         });
       }
-
       setEditing(null);
       await load(true);
     } catch (e: any) {
@@ -169,9 +177,9 @@ export default function ControlOperativoPage() {
       {error && <div className="op-error">{error}</div>}
 
       <div className="op-filters">
-        <div className="op-search"><Search size={16} /><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar código de reserva, nombre, documento, contacto…" /></div>
-        <label><span>Fecha</span><select value={fecha} onChange={e => setFecha(e.target.value)}><option value="">Todas</option>{fechas.map(v => <option key={v}>{v}</option>)}</select></label>
-        <label><span>Plan</span><select value={plan} onChange={e => setPlan(e.target.value)}><option value="">Todos</option>{planes.map(v => <option key={v}>{v}</option>)}</select></label>
+        <div className="op-search"><Search size={16} /><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar código, nombre, fecha, horario, documento…" /></div>
+        <label><span>Fecha reserva</span><select value={fecha} onChange={e => setFecha(e.target.value)}><option value="">Todas</option>{fechas.map(v => <option key={v} value={v}>{formatDate(v)}</option>)}</select></label>
+        <label><span>Plan</span><select value={plan} onChange={e => setPlan(e.target.value)}><option value="">Todos</option>{planes.map(v => <option key={v} value={v}>{v}</option>)}</select></label>
         <label><span>Horario</span><select value={hora} onChange={e => setHora(e.target.value)}><option value="">Todos</option>{horas.map(v => <option key={v} value={v}>{normalizeHour(v)}</option>)}</select></label>
         <label className="op-group-toggle"><input type="checkbox" checked={agrupar} onChange={e => setAgrupar(e.target.checked)} /><span>Agrupar por reserva</span></label>
         <button className="op-clear" onClick={() => { setSearch(""); setFecha(""); setPlan(""); setHora(""); }}><X size={14} /> Limpiar</button>
@@ -187,30 +195,27 @@ export default function ControlOperativoPage() {
       <div className="op-table-wrap">
         <table className="op-table">
           <thead><tr>
-            <th>Código reserva</th><th>Ruta / Plan</th><th>Nombre</th><th>Edad</th><th>Nacionalidad</th><th>Documento</th><th>Contacto</th><th>Cantidad</th><th>Hora</th>
+            <th>Código reserva</th><th>Ruta / Plan</th><th>Fecha reserva</th><th>Horario</th><th>Nombre</th><th>Edad</th><th>Nacionalidad</th><th>Documento</th><th>Contacto</th><th>Cantidad</th>
             <th>Mina</th><th>Refrigerio</th><th>Restaurante</th><th>Almuerzo</th><th>Total</th><th>Abono</th><th>Medio Abono</th><th>Pago Saldo</th><th>Medio Saldo</th><th>Saldo Pendiente</th><th>Observación</th><th>Acciones</th>
           </tr></thead>
           <tbody>
-            {!filtered.length ? <tr><td colSpan={21} className="op-empty">No hay registros para los filtros seleccionados.</td></tr> : filtered.map((r, index) => {
+            {!filtered.length ? <tr><td colSpan={22} className="op-empty">No hay registros para los filtros seleccionados.</td></tr> : filtered.map((r, index) => {
               const isFirstOfReservation = !agrupar || previousReserva !== r.id_reserva;
               const groupStart = agrupar && isFirstOfReservation;
               previousReserva = r.id_reserva;
-
               return <tr key={`${r.id_reserva}-${r.id_participante ?? index}`} className={groupStart ? "group-start" : ""}>
                 <td><div className="op-reserva"><strong>{r.reserva_codigo}</strong><span className="state ok">Aprobada</span></div></td>
                 <td className="plan-cell">{r.plan || "—"}</td>
+                <td className="center">{formatDate(r.fecha)}</td>
+                <td className="center">{normalizeHour(r.hora)}</td>
                 <td>{r.nombre || "—"}</td><td>{r.edad ?? "—"}</td><td>{r.nacionalidad || "—"}</td>
                 <td>{r.documento || "—"}</td><td>{r.contacto || "—"}</td>
                 <td className="center">{isFirstOfReservation ? (r.cantidad ?? "—") : null}</td>
-                <td className="center">{normalizeHour(r.hora)}</td>
                 <td><button className={`yn ${r.mina ? "yes" : "no"}`} onClick={() => quickToggle(r, "mina")}>{yesNo(r.mina)}</button></td>
                 <td><button className={`yn ${r.refrigerio ? "yes" : "no"}`} onClick={() => quickToggle(r, "refrigerio")}>{yesNo(r.refrigerio)}</button></td>
-                <td>{r.restaurante || "—"}</td>
-                <td>{r.almuerzo || "—"}</td>
-                <td className="money">{isFirstOfReservation ? money(r.total) : null}</td>
-                <td className="money">{isFirstOfReservation ? money(r.abono) : null}</td>
-                <td>{isFirstOfReservation ? (r.medio_abono || "—") : null}</td>
-                <td className="money">{isFirstOfReservation ? money(r.pago_saldo) : null}</td>
+                <td>{r.restaurante || "—"}</td><td>{r.almuerzo || "—"}</td>
+                <td className="money">{isFirstOfReservation ? money(r.total) : null}</td><td className="money">{isFirstOfReservation ? money(r.abono) : null}</td>
+                <td>{isFirstOfReservation ? (r.medio_abono || "—") : null}</td><td className="money">{isFirstOfReservation ? money(r.pago_saldo) : null}</td>
                 <td>{isFirstOfReservation ? (r.medio_saldo || "—") : null}</td>
                 <td className={`money ${r.saldo_pendiente > 0 ? "pending-money" : "paid-money"}`}>{isFirstOfReservation ? money(r.saldo_pendiente) : null}</td>
                 <td className="obs-cell" title={isFirstOfReservation ? r.observacion : ""}>{isFirstOfReservation ? (r.observacion || "—") : null}</td>
@@ -224,7 +229,7 @@ export default function ControlOperativoPage() {
       {selected && <div className="op-modal-backdrop" onMouseDown={() => setSelected(null)}><div className="op-modal" onMouseDown={e => e.stopPropagation()}>
         <div className="op-modal-head"><div><h2>Detalle operativo</h2><p>Reserva {selected.reserva_codigo}</p></div><button onClick={() => setSelected(null)}><X size={20} /></button></div>
         <div className="op-detail-grid">{[
-          ["Plan", selected.plan], ["Fecha", selected.fecha], ["Hora", normalizeHour(selected.hora)], ["Participante", selected.nombre], ["Documento", `${selected.tipo_documento} ${selected.documento}`.trim()], ["Contacto", selected.contacto],
+          ["Plan", selected.plan], ["Fecha reserva", formatDate(selected.fecha)], ["Horario", normalizeHour(selected.hora)], ["Participante", selected.nombre], ["Documento", `${selected.tipo_documento} ${selected.documento}`.trim()], ["Contacto", selected.contacto],
           ["Mina", yesNo(selected.mina)], ["Refrigerio", yesNo(selected.refrigerio)], ["Restaurante", selected.restaurante || "—"], ["Almuerzo", selected.almuerzo || "—"], ["Total", money(selected.total)], ["Abono", money(selected.abono)], ["Pago saldo", money(selected.pago_saldo)], ["Saldo pendiente", money(selected.saldo_pendiente)], ["Observación", selected.observacion || "—"],
         ].map(([k,v]) => <div key={k}><span>{k}</span><strong>{v}</strong></div>)}</div>
       </div></div>}
@@ -232,17 +237,10 @@ export default function ControlOperativoPage() {
       {editing && <div className="op-modal-backdrop"><div className="op-modal edit-modal">
         <div className="op-modal-head"><div><h2>Edición operativa</h2><p>Participante de la reserva {editing.reserva_codigo}</p></div><button onClick={() => setEditing(null)}><X size={20} /></button></div>
         <div className="op-edit-grid">
-          <label>Código de reserva<input value={editing.reserva_codigo} readOnly title="El código de reserva se genera automáticamente en Supabase y no se modifica desde Control Operativo." /></label>
-          <label>Plan<select value={editing.id_plan ?? ""} onChange={e => {
-            const id = e.target.value ? Number(e.target.value) : null;
-            const name = planOptions.find(([optionId]) => optionId === id)?.[1] || "";
-            setEditing({ ...editing, id_plan: id, plan: name });
-          }}><option value="">Sin plan</option>{planOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label>
-          <label>Hora<select value={editing.id_hora ?? ""} onChange={e => {
-            const id = e.target.value ? Number(e.target.value) : null;
-            const value = hourOptions.find(([optionId]) => optionId === id)?.[1] || "";
-            setEditing({ ...editing, id_hora: id, hora: value });
-          }}><option value="">Sin hora</option>{hourOptions.map(([id, value]) => <option key={id} value={id}>{normalizeHour(value)}</option>)}</select></label>
+          <label>Código de reserva<input value={editing.reserva_codigo} readOnly title="Código comercial autogenerado por la base de datos." /></label>
+          <label>Fecha reserva<input value={formatDate(editing.fecha)} readOnly /></label>
+          <label>Plan<select value={editing.id_plan ?? ""} onChange={e => { const id = e.target.value ? Number(e.target.value) : null; const name = planOptions.find(([optionId]) => optionId === id)?.[1] || ""; setEditing({ ...editing, id_plan: id, plan: name }); }}><option value="">Sin plan</option>{planOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label>
+          <label>Hora<select value={editing.id_hora ?? ""} onChange={e => { const id = e.target.value ? Number(e.target.value) : null; const value = hourOptions.find(([optionId]) => optionId === id)?.[1] || ""; setEditing({ ...editing, id_hora: id, hora: value }); }}><option value="">Sin hora</option>{hourOptions.map(([id, value]) => <option key={id} value={id}>{normalizeHour(value)}</option>)}</select></label>
           <label>Nombre<input value={editing.nombre} onChange={e => setEditing({ ...editing, nombre: e.target.value })} /></label>
           <label>Edad<input type="number" value={editing.edad ?? ""} onChange={e => setEditing({ ...editing, edad: e.target.value ? Number(e.target.value) : null })} /></label>
           <label>Nacionalidad<input value={editing.nacionalidad} onChange={e => setEditing({ ...editing, nacionalidad: e.target.value })} /></label>
