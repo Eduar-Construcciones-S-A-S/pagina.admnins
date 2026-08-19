@@ -11,6 +11,7 @@ import ClientesPage from "./pages/ClientesPage";
 import ParticipantesPage from "./pages/ParticipantesPage";
 import ControlOperativoPage from "./pages/ControlOperativoPage";
 import ProtectedRoute from "./components/ProtectedRoute";
+import RoleRoute from "./components/RoleRoute";
 
 import "./styles/dashboard.css";
 
@@ -29,12 +30,12 @@ export default function App() {
             </ProtectedRoute>
           }
         >
-          <Route index element={<OverviewPage />} />
-          <Route path="reservas" element={<ReservasPage />} />
-          <Route path="control-operativo" element={<ControlOperativoPage />} />
-          <Route path="planes" element={<PlanesPage />} />
-          <Route path="clientes" element={<ClientesPage />} />
-          <Route path="participantes" element={<ParticipantesPage />} />
+          <Route index element={<RoleRoute allow={["administrador"]}><OverviewPage /></RoleRoute>} />
+          <Route path="reservas" element={<RoleRoute allow={["administrador", "atencion"]}><ReservasPage /></RoleRoute>} />
+          <Route path="control-operativo" element={<RoleRoute allow={["administrador", "atencion"]}><ControlOperativoPage /></RoleRoute>} />
+          <Route path="planes" element={<RoleRoute allow={["administrador"]}><PlanesPage /></RoleRoute>} />
+          <Route path="clientes" element={<RoleRoute allow={["administrador"]}><ClientesPage /></RoleRoute>} />
+          <Route path="participantes" element={<RoleRoute allow={["administrador"]}><ParticipantesPage /></RoleRoute>} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
