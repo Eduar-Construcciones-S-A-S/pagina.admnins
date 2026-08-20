@@ -20,7 +20,9 @@ export type CodigoOperativo = {
     id_plan: number;
     nombre_plan: string;
     precio_plan?: number | null;
+    tipo_fecha?: string | null;
     tipo_hora?: string | null;
+    plan_fechas?: Array<{ id_fecha: number; fecha: string }>;
     plan_horas?: Array<{ id_hora: number; hora: string }>;
   } | null;
 };
@@ -38,7 +40,7 @@ export type CodigoOperativoPayload = {
 export async function getCodigosOperativos(): Promise<CodigoOperativo[]> {
   const { data, error } = await client()
     .from("codigo_operativo")
-    .select("id_codigo_operativo,codigo_ch,descripcion,id_plan,incluye_almuerzo,restaurante,prioridad,activo,created_at,updated_at,plan(id_plan,nombre_plan,precio_plan,tipo_hora,plan_horas(id_hora,hora))")
+    .select("id_codigo_operativo,codigo_ch,descripcion,id_plan,incluye_almuerzo,restaurante,prioridad,activo,created_at,updated_at,plan(id_plan,nombre_plan,precio_plan,tipo_fecha,tipo_hora,plan_fechas(id_fecha,fecha),plan_horas(id_hora,hora))")
     .order("codigo_ch", { ascending: true });
   if (error) throw error;
   return (data ?? []).map((r: any) => ({
@@ -50,6 +52,7 @@ export async function getCodigosOperativos(): Promise<CodigoOperativo[]> {
       ...r.plan,
       id_plan: Number(r.plan.id_plan),
       precio_plan: r.plan.precio_plan == null ? null : Number(r.plan.precio_plan),
+      plan_fechas: (r.plan.plan_fechas ?? []).map((f: any) => ({ id_fecha: Number(f.id_fecha), fecha: String(f.fecha ?? "").slice(0,10) })),
       plan_horas: (r.plan.plan_horas ?? []).map((h: any) => ({ id_hora: Number(h.id_hora), hora: String(h.hora ?? "") })),
     } : null,
   })) as CodigoOperativo[];
@@ -92,11 +95,13 @@ export function codigosCompatibles(codigos: CodigoOperativo[], idPlan: number | 
     .filter((c) => c.activo && c.id_plan === idPlan && c.incluye_almuerzo === incluyeAlmuerzo)
     .filter((c) => !incluyeAlmuerzo || !c.restaurante || c.restaurante.trim().toLowerCase() === rest)
     .sort((a, b) => {
-      const exactA = a.restaurante && a.restaurante.trim().toLowerCase() === rest ? 1 : 0;
-      const exactB = b.restaurante && b.restaurante.trim().toLowerCase() === rest ? 1 : 0;
+      const exactA = cRestaurant(a) === rest && !!a.restaurante ? 1 : 0;
+      const exactB = cRestaurant(b) === rest && !!b.restaurante ? 1 : 0;
       return exactB - exactA || b.prioridad - a.prioridad || a.codigo_ch.localeCompare(b.codigo_ch);
     });
 }
+
+function cRestaurant(c: CodigoOperativo) { return String(c.restaurante ?? "").trim().toLowerCase(); }
 
 export async function aprobarReservaOperativa(args: {
   id_reserva: number;
