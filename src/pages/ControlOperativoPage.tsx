@@ -1,36 +1,273 @@
-import { useCallback,useEffect,useMemo,useState } from "react";
-import { Download,Filter,Pencil,Plus,RefreshCw,Search,SlidersHorizontal,Trash2,X } from "lucide-react";
-import { getControlOperativo,getPagosControlOperativo,getReservaPagos,replaceSaldoPagos,updateControlParticipante,updateControlReserva,type ControlOperativoRow,type ReservaPago } from "../services/controlOperativo.service";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Download, Filter, Pencil, Plus, RefreshCw, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
+import {
+  getControlOperativo,
+  getPagosControlOperativo,
+  getReservaPagos,
+  replaceSaldoPagos,
+  updateControlParticipante,
+  updateControlReserva,
+  type ControlOperativoRow,
+  type ReservaPago,
+} from "../services/controlOperativo.service";
 import { getMetodosPagoActivos } from "../services/medioPago.service";
 import { getRestaurantesActivos } from "../services/restaurante.service";
 import "../styles/control-operativo.css";
-const money=(v:number)=>`$${Number(v||0).toLocaleString("es-CO")}`, norm=(v:unknown)=>String(v??"").trim().toLowerCase(), dk=(v:string)=>v?v.slice(0,10):"", hk=(v:string)=>v?v.slice(0,5):"", fmt=(v:string)=>{const k=dk(v);if(!k)return"—";const[y,m,d]=k.split("-");return`${d}/${m}/${y}`}, num=(v:string)=>v===""?("" as any):Number(v.replace(/[^0-9]/g,"")), saved=(v:unknown)=>v===""||v==null?0:Number(v), phone=(v:string)=>String(v||"").replace(/\D/g,"");
-const fmtPago=(value?:string)=>value?new Date(value).toLocaleString("es-CO",{timeZone:"America/Bogota",day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}):"—";
-type Split={monto:number;medio_pago:string};
-export default function ControlOperativoPage(){
- const[rows,setRows]=useState<ControlOperativoRow[]>([]),[metodos,setMetodos]=useState<string[]>([]),[restaurantes,setRestaurantes]=useState<string[]>([]),[pagos,setPagos]=useState<ReservaPago[]>([]);const[loading,setLoading]=useState(true),[refreshing,setRefreshing]=useState(false),[error,setError]=useState<string|null>(null);
- const[search,setSearch]=useState(""),[fecha,setFecha]=useState(""),[plan,setPlan]=useState(""),[hora,setHora]=useState(""),[mina,setMina]=useState(""),[refrigerio,setRefrigerio]=useState(""),[restaurante,setRestaurante]=useState(""),[almuerzo,setAlmuerzo]=useState(""),[saldo,setSaldo]=useState("");const[editing,setEditing]=useState<ControlOperativoRow|null>(null),[splits,setSplits]=useState<Split[]>([]),[saving,setSaving]=useState(false),[medioDetalle,setMedioDetalle]=useState<string|null>(null);
- const load=useCallback(async(s=false)=>{s?setRefreshing(true):setLoading(true);setError(null);try{const[o,m,r,p]=await Promise.all([getControlOperativo(),getMetodosPagoActivos(),getRestaurantesActivos(),getPagosControlOperativo()]);setRows(o);setMetodos(m);setRestaurantes(r);setPagos(p);}catch(e:any){setError(e?.message||"No fue posible cargar el control operativo.");}finally{setLoading(false);setRefreshing(false)}},[]);useEffect(()=>{load()},[load]);
- const fechas=useMemo(()=>[...new Set(rows.map(r=>dk(r.fecha)).filter(Boolean))].sort().reverse(),[rows]),planes=useMemo(()=>[...new Set(rows.map(r=>r.plan).filter(Boolean))].sort(),[rows]),horas=useMemo(()=>[...new Set(rows.map(r=>hk(r.hora)).filter(Boolean))].sort(),[rows]),planOpts=useMemo(()=>[...new Map(rows.filter(r=>r.id_plan!=null).map(r=>[r.id_plan!,r.plan])).entries()],[rows]),horaOpts=useMemo(()=>[...new Map(rows.filter(r=>r.id_hora!=null).map(r=>[r.id_hora!,r.hora])).entries()],[rows]);
- const filtered=useMemo(()=>rows.filter(r=>{const q=norm(search);if(fecha&&dk(r.fecha)!==fecha)return false;if(plan&&r.plan!==plan)return false;if(hora&&hk(r.hora)!==hora)return false;if(mina&&String(!!r.mina)!==(mina==="si"?"true":"false"))return false;if(refrigerio&&String(!!r.refrigerio)!==(refrigerio==="si"?"true":"false"))return false;if(restaurante&&r.restaurante!==restaurante)return false;if(almuerzo==="si"&&!r.almuerzo)return false;if(almuerzo==="no"&&r.almuerzo)return false;if(saldo==="pendiente"&&r.saldo_pendiente<=0)return false;if(saldo==="pagado"&&r.saldo_pendiente>0)return false;return!q||[r.reserva_codigo,r.plan,r.nombre,r.documento,r.contacto,r.observacion,r.medio_abono,r.medio_saldo].map(norm).join(" ").includes(q)}),[rows,search,fecha,plan,hora,mina,refrigerio,restaurante,almuerzo,saldo]);
- const reservas=[...new Map(filtered.map(r=>[r.id_reserva,r])).values()];
- const reservaIds=useMemo(()=>new Set(reservas.map(r=>r.id_reserva)),[reservas]);
- const pagosVista=useMemo(()=>pagos.filter(p=>reservaIds.has(p.id_reserva)),[pagos,reservaIds]);
- const cajaMedios=useMemo(()=>{const m=new Map<string,number>();pagosVista.forEach(x=>m.set(x.medio_pago,(m.get(x.medio_pago)||0)+x.monto));return[...m.entries()].sort((a,b)=>b[1]-a[1])},[pagosVista]);
- const movimientosDetalle=useMemo(()=>medioDetalle?pagosVista.filter(p=>p.medio_pago===medioDetalle):[],[pagosVista,medioDetalle]);
- const rowByReserva=useMemo(()=>new Map(rows.map(r=>[r.id_reserva,r])),[rows]);
- const openEdit=async(r:ControlOperativoRow)=>{setEditing({...r});try{const p=await getReservaPagos(r.id_reserva);const s=p.filter(x=>x.tipo_pago==="saldo").map(x=>({monto:x.monto,medio_pago:x.medio_pago}));setSplits(s.length?s:r.pago_saldo>0?[{monto:r.pago_saldo,medio_pago:r.medio_saldo}]:[{monto:0,medio_pago:""}]);}catch{setSplits(r.pago_saldo>0?[{monto:r.pago_saldo,medio_pago:r.medio_saldo}]:[{monto:0,medio_pago:""}])}};
- const totalSplit=splits.reduce((s,p)=>s+saved(p.monto),0),pendienteEdit=editing?Math.max(0,saved(editing.total)-saved(editing.abono)-totalSplit):0;
- const save=async()=>{if(!editing)return;const invalid=splits.some(p=>(saved(p.monto)>0&&!p.medio_pago)||(p.medio_pago&&saved(p.monto)<=0));if(invalid){setError("Cada pago de saldo debe tener un valor mayor a cero y un medio de pago.");return}if(saved(editing.abono)+totalSplit>saved(editing.total)){setError("El abono y los pagos de saldo no pueden superar el valor total de la reserva.");return}setSaving(true);setError(null);try{await updateControlReserva(editing.id_reserva,{id_plan:editing.id_plan,id_hora:editing.id_hora,mina:editing.mina,refrigerio:editing.refrigerio,restaurante:editing.restaurante||null,valor_total:saved(editing.total),valor_abonado:saved(editing.abono),metodo_pago_abono:editing.medio_abono||null,observacion:editing.observacion||null});await replaceSaldoPagos(editing.id_reserva,splits);if(editing.id_participante)await updateControlParticipante(editing.id_participante,{nombre:editing.nombre||null,edad:editing.edad==="" as any?null:editing.edad,nacionalidad:editing.nacionalidad||null,numero_documento:editing.documento||null,telefono_participante:phone(editing.contacto)!==phone(editing.contacto_cliente)?editing.contacto.trim()||null:null,tipo_almuerzo:editing.almuerzo.trim()||null});setEditing(null);await load(true)}catch(e:any){setError(e?.message||"No fue posible guardar los cambios.")}finally{setSaving(false)}};
- const clear=()=>{setSearch("");setFecha("");setPlan("");setHora("");setMina("");setRefrigerio("");setRestaurante("");setAlmuerzo("");setSaldo("");setMedioDetalle(null)};
- if(loading)return <div className="op-loading">Cargando control operativo…</div>;let prev:number|null=null;
- return <div className="op-page"><div className="op-head"><div><h1>Control Operativo</h1><p>Vista consolidada de reservas, participantes, servicios y pagos.</p></div><div className="op-head-actions"><button className="op-btn secondary" onClick={()=>load(true)}><RefreshCw size={16} className={refreshing?"spin-icon":""}/> Actualizar</button><button className="op-btn primary" onClick={()=>window.print()}><Download size={16}/> Exportar</button></div></div>{error&&<div className="op-error">{error}</div>}
- <div className="op-filters"><div className="op-search"><Search size={16}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar código, nombre, documento…"/></div><label><span>Fecha reserva</span><select value={fecha} onChange={e=>{setFecha(e.target.value);setMedioDetalle(null)}}><option value="">Todas</option>{fechas.map(x=><option key={x} value={x}>{fmt(x)}</option>)}</select></label><label><span>Plan</span><select value={plan} onChange={e=>setPlan(e.target.value)}><option value="">Todos</option>{planes.map(x=><option key={x}>{x}</option>)}</select></label><label><span>Horario</span><select value={hora} onChange={e=>setHora(e.target.value)}><option value="">Todos</option>{horas.map(x=><option key={x}>{x}</option>)}</select></label><label><span>Mina</span><select value={mina} onChange={e=>setMina(e.target.value)}><option value="">Todos</option><option value="si">Sí</option><option value="no">No</option></select></label><label><span>Refrigerio</span><select value={refrigerio} onChange={e=>setRefrigerio(e.target.value)}><option value="">Todos</option><option value="si">Sí</option><option value="no">No</option></select></label><label><span>Restaurante</span><select value={restaurante} onChange={e=>setRestaurante(e.target.value)}><option value="">Todos</option>{restaurantes.map(x=><option key={x}>{x}</option>)}</select></label><label><span>Almuerzo</span><select value={almuerzo} onChange={e=>setAlmuerzo(e.target.value)}><option value="">Todos</option><option value="si">Con almuerzo</option><option value="no">Sin almuerzo</option></select></label><label><span>Saldo</span><select value={saldo} onChange={e=>setSaldo(e.target.value)}><option value="">Todos</option><option value="pendiente">Pendiente</option><option value="pagado">Pagado</option></select></label><button className="op-clear" onClick={clear}><X size={14}/> Limpiar</button></div>
- <div className="op-summary"><span><Filter size={14}/>{filtered.length} filas</span><span>{reservas.length} reservas</span><span>Ventas: <b>{money(reservas.reduce((s,r)=>s+r.total,0))}</b></span><span>Saldo pendiente: <b>{money(reservas.reduce((s,r)=>s+r.saldo_pendiente,0))}</b></span></div>
- {fecha&&<section className="op-cash-day"><div><strong>Recaudo de las reservas del {fmt(fecha)}</strong><small>Haz clic en un medio para ver exactamente de qué reservas salió el dinero.</small></div><div className="op-cash-items">{cajaMedios.length?cajaMedios.map(([m,v])=><button type="button" className="op-cash-card" key={m} onClick={()=>setMedioDetalle(m)}><span>{m}</span><b>{money(v)}</b><small>Ver detalle</small></button>):<span className="op-cash-empty">No hay movimientos de saldo registrados para estas reservas.</span>}<div className="op-cash-total"><span>Total registrado</span><b>{money(cajaMedios.reduce((s,[,v])=>s+v,0))}</b></div></div></section>}
- <div className="op-table-wrap"><table className="op-table"><thead><tr><th>Código</th><th>Plan</th><th>Fecha</th><th>Hora</th><th>Nombre</th><th>Edad</th><th>Nacionalidad</th><th>Documento</th><th>Contacto</th><th>Cant.</th><th>Mina</th><th>Refrigerio</th><th>Restaurante</th><th>Almuerzo</th><th>Total</th><th>Abono</th><th>Medio abono</th><th>Pago saldo</th><th>Medio saldo</th><th>Pendiente</th><th>Observación</th><th>Acciones</th></tr></thead><tbody>{filtered.map((r,i)=>{const first=prev!==r.id_reserva;prev=r.id_reserva;return <tr key={`${r.id_reserva}-${r.id_participante??i}`} className={first?"group-start":""}><td><strong>{r.reserva_codigo}</strong></td><td>{r.plan}</td><td>{fmt(r.fecha)}</td><td>{hk(r.hora)||"—"}</td><td>{r.nombre}</td><td>{r.edad??"—"}</td><td>{r.nacionalidad}</td><td>{r.documento}</td><td>{r.contacto}</td><td>{first?r.cantidad:""}</td><td>{r.mina?"SI":"NO"}</td><td>{r.refrigerio?"SI":"NO"}</td><td>{r.restaurante||"—"}</td><td>{r.almuerzo||"—"}</td><td>{first?money(r.total):""}</td><td>{first?money(r.abono):""}</td><td>{first?r.medio_abono:""}</td><td>{first?money(r.pago_saldo):""}</td><td>{first?(r.medio_saldo|| (r.pago_saldo>0?"Varios medios":"")):""}</td><td className={r.saldo_pendiente>0?"pending-money":"paid-money"}>{first?money(r.saldo_pendiente):""}</td><td>{first?r.observacion:""}</td><td><button className="op-icon-btn" onClick={()=>openEdit(r)}><Pencil size={15}/></button></td></tr>})}</tbody></table></div>
- {medioDetalle&&<div className="op-modal-backdrop" onMouseDown={()=>setMedioDetalle(null)}><div className="op-modal op-cash-detail-modal" onMouseDown={e=>e.stopPropagation()}><div className="op-modal-head"><div><h2>Detalle de recaudo · {medioDetalle}</h2><p>{fecha?`Reservas del ${fmt(fecha)}`:"Reservas filtradas"} · Total {money(movimientosDetalle.reduce((s,p)=>s+p.monto,0))}</p></div><button onClick={()=>setMedioDetalle(null)}><X/></button></div><div className="op-cash-detail-body"><table className="op-cash-detail-table"><thead><tr><th>Reserva</th><th>Cliente / participante</th><th>Plan</th><th>Fecha reserva</th><th>Hora</th><th>Tipo</th><th>Registrado</th><th>Valor</th></tr></thead><tbody>{movimientosDetalle.map((p,i)=>{const r=rowByReserva.get(p.id_reserva);return <tr key={p.id_pago??i}><td><strong>{r?.reserva_codigo||`#${p.id_reserva}`}</strong></td><td>{r?.nombre||r?.contacto_cliente||"—"}</td><td>{r?.plan||"—"}</td><td>{r?.fecha?fmt(r.fecha):"—"}</td><td>{r?.hora?hk(r.hora):"—"}</td><td>{p.tipo_pago==="saldo"?"Saldo":"Abono"}</td><td>{fmtPago(p.fecha_pago)}</td><td><strong>{money(p.monto)}</strong></td></tr>})}</tbody></table>{!movimientosDetalle.length&&<div className="op-cash-empty-detail">No hay movimientos para este medio.</div>}</div><div className="op-cash-detail-footer"><span>{movimientosDetalle.length} movimiento{movimientosDetalle.length===1?"":"s"}</span><strong>Total: {money(movimientosDetalle.reduce((s,p)=>s+p.monto,0))}</strong></div></div></div>}
- {editing&&<div className="op-modal-backdrop"><div className="op-modal edit-modal"><div className="op-modal-head"><div><h2>Edición operativa</h2><p>Participante de la reserva {editing.reserva_codigo}</p></div><button onClick={()=>setEditing(null)}><X/></button></div><div className="op-edit-grid"><label>Código<input value={editing.reserva_codigo} readOnly/></label><label>Fecha<input value={fmt(editing.fecha)} readOnly/></label><label>Plan<select value={editing.id_plan??""} onChange={e=>setEditing({...editing,id_plan:e.target.value?Number(e.target.value):null})}>{planOpts.map(([id,n])=><option key={id} value={id}>{n}</option>)}</select></label><label>Hora<select value={editing.id_hora??""} onChange={e=>setEditing({...editing,id_hora:e.target.value?Number(e.target.value):null})}><option value="">Sin hora</option>{horaOpts.map(([id,h])=><option key={id} value={id}>{hk(h)}</option>)}</select></label><label>Nombre<input value={editing.nombre} onChange={e=>setEditing({...editing,nombre:e.target.value})}/></label><label>Edad<input inputMode="numeric" value={editing.edad??""} onChange={e=>setEditing({...editing,edad:num(e.target.value)})}/></label><label>Nacionalidad<input value={editing.nacionalidad} onChange={e=>setEditing({...editing,nacionalidad:e.target.value})}/></label><label>Documento<input value={editing.documento} onChange={e=>setEditing({...editing,documento:e.target.value})}/></label><label>Contacto<input value={editing.contacto} onChange={e=>setEditing({...editing,contacto:e.target.value})}/></label><label>Restaurante<select value={editing.restaurante} onChange={e=>setEditing({...editing,restaurante:e.target.value})}><option value="">Sin restaurante</option>{restaurantes.map(x=><option key={x}>{x}</option>)}</select></label><label>Almuerzo<input value={editing.almuerzo} onChange={e=>setEditing({...editing,almuerzo:e.target.value})}/></label><label>Total<input inputMode="numeric" value={editing.total} onChange={e=>setEditing({...editing,total:num(e.target.value)})}/></label><label>Abono<input inputMode="numeric" value={editing.abono} onChange={e=>setEditing({...editing,abono:num(e.target.value)})}/></label><label>Medio abono<select value={editing.medio_abono} onChange={e=>setEditing({...editing,medio_abono:e.target.value})}><option value="">Sin método</option>{metodos.map(x=><option key={x}>{x}</option>)}</select></label><div className="op-checks"><label><input type="checkbox" checked={!!editing.mina} onChange={e=>setEditing({...editing,mina:e.target.checked})}/> Mina</label><label><input type="checkbox" checked={!!editing.refrigerio} onChange={e=>setEditing({...editing,refrigerio:e.target.checked})}/> Refrigerio</label></div>
- <div className="op-payments full"><div className="op-payments-head"><div><strong>Pagos del saldo</strong><small>Puede dividir el saldo entre varios medios de pago.</small></div><button className="op-btn secondary" onClick={()=>setSplits([...splits,{monto:0,medio_pago:""}])}><Plus size={15}/> Añadir medio</button></div>{splits.map((p,i)=><div className="op-payment-row" key={i}><label>Valor<input inputMode="numeric" value={p.monto||""} onChange={e=>setSplits(splits.map((x,j)=>j===i?{...x,monto:num(e.target.value)}:x))}/></label><label>Medio<select value={p.medio_pago} onChange={e=>setSplits(splits.map((x,j)=>j===i?{...x,medio_pago:e.target.value}:x))}><option value="">Seleccione</option>{metodos.map(x=><option key={x}>{x}</option>)}</select></label><button className="op-remove-payment" onClick={()=>setSplits(splits.filter((_,j)=>j!==i))} title="Quitar"><Trash2 size={16}/></button></div>)}<div className="op-payment-totals"><span>Saldo pagado: <b>{money(totalSplit)}</b></span><span>Pendiente: <b>{money(pendienteEdit)}</b></span></div></div>
- <label className="full">Observación<textarea rows={3} value={editing.observacion} onChange={e=>setEditing({...editing,observacion:e.target.value})}/></label></div><div className="op-modal-footer"><button className="op-btn secondary" onClick={()=>setEditing(null)}>Cancelar</button><button className="op-btn primary" disabled={saving} onClick={save}><SlidersHorizontal size={16}/>{saving?"Guardando…":"Guardar cambios"}</button></div></div></div>}</div>
+
+const money = (v: number) => `$${Number(v || 0).toLocaleString("es-CO")}`;
+const norm = (v: unknown) => String(v ?? "").trim().toLowerCase();
+const dk = (v: string) => (v ? v.slice(0, 10) : "");
+const hk = (v: string) => (v ? v.slice(0, 5) : "");
+const fmt = (v: string) => {
+  const k = dk(v);
+  if (!k) return "—";
+  const [y, m, d] = k.split("-");
+  return `${d}/${m}/${y}`;
+};
+const num = (v: string) => (v === "" ? ("" as any) : Number(v.replace(/[^0-9]/g, "")));
+const saved = (v: unknown) => (v === "" || v == null ? 0 : Number(v));
+const phone = (v: string) => String(v || "").replace(/\D/g, "");
+const fmtPago = (value?: string) =>
+  value
+    ? new Date(value).toLocaleString("es-CO", {
+        timeZone: "America/Bogota",
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "—";
+
+type Split = { monto: number; medio_pago: string };
+
+export default function ControlOperativoPage() {
+  const [rows, setRows] = useState<ControlOperativoRow[]>([]);
+  const [metodos, setMetodos] = useState<string[]>([]);
+  const [restaurantes, setRestaurantes] = useState<string[]>([]);
+  const [pagos, setPagos] = useState<ReservaPago[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [search, setSearch] = useState("");
+  const [fecha, setFecha] = useState("");
+  const [plan, setPlan] = useState("");
+  const [hora, setHora] = useState("");
+  const [mina, setMina] = useState("");
+  const [refrigerio, setRefrigerio] = useState("");
+  const [restaurante, setRestaurante] = useState("");
+  const [almuerzo, setAlmuerzo] = useState("");
+  const [saldo, setSaldo] = useState("");
+
+  const [editing, setEditing] = useState<ControlOperativoRow | null>(null);
+  const [splits, setSplits] = useState<Split[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [medioDetalle, setMedioDetalle] = useState<string | null>(null);
+
+  const load = useCallback(async (silent = false) => {
+    silent ? setRefreshing(true) : setLoading(true);
+    setError(null);
+    try {
+      const [operativo, medios, restaurantesData, pagosData] = await Promise.all([
+        getControlOperativo(),
+        getMetodosPagoActivos(),
+        getRestaurantesActivos(),
+        getPagosControlOperativo(),
+      ]);
+      setRows(operativo);
+      setMetodos(medios);
+      setRestaurantes(restaurantesData);
+      setPagos(pagosData);
+    } catch (e: any) {
+      setError(e?.message || "No fue posible cargar el control operativo.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const planes = useMemo(() => [...new Set(rows.map((r) => r.plan).filter(Boolean))].sort(), [rows]);
+  const horas = useMemo(() => [...new Set(rows.map((r) => hk(r.hora)).filter(Boolean))].sort(), [rows]);
+  const planOpts = useMemo(() => [...new Map(rows.filter((r) => r.id_plan != null).map((r) => [r.id_plan!, r.plan])).entries()], [rows]);
+  const horaOpts = useMemo(() => [...new Map(rows.filter((r) => r.id_hora != null).map((r) => [r.id_hora!, r.hora])).entries()], [rows]);
+
+  const filtered = useMemo(
+    () =>
+      rows.filter((r) => {
+        const q = norm(search);
+        if (fecha && dk(r.fecha) !== fecha) return false;
+        if (plan && r.plan !== plan) return false;
+        if (hora && hk(r.hora) !== hora) return false;
+        if (mina && String(!!r.mina) !== (mina === "si" ? "true" : "false")) return false;
+        if (refrigerio && String(!!r.refrigerio) !== (refrigerio === "si" ? "true" : "false")) return false;
+        if (restaurante && r.restaurante !== restaurante) return false;
+        if (almuerzo === "si" && !r.almuerzo) return false;
+        if (almuerzo === "no" && r.almuerzo) return false;
+        if (saldo === "pendiente" && r.saldo_pendiente <= 0) return false;
+        if (saldo === "pagado" && r.saldo_pendiente > 0) return false;
+        return (
+          !q ||
+          [r.reserva_codigo, r.plan, r.nombre, r.documento, r.contacto, r.observacion, r.medio_abono, r.medio_saldo]
+            .map(norm)
+            .join(" ")
+            .includes(q)
+        );
+      }),
+    [rows, search, fecha, plan, hora, mina, refrigerio, restaurante, almuerzo, saldo]
+  );
+
+  const reservas = [...new Map(filtered.map((r) => [r.id_reserva, r])).values()];
+  const reservaIds = useMemo(() => new Set(reservas.map((r) => r.id_reserva)), [reservas]);
+  const pagosVista = useMemo(() => pagos.filter((p) => reservaIds.has(p.id_reserva)), [pagos, reservaIds]);
+  const cajaMedios = useMemo(() => {
+    const map = new Map<string, number>();
+    pagosVista.forEach((p) => map.set(p.medio_pago, (map.get(p.medio_pago) || 0) + p.monto));
+    return [...map.entries()].sort((a, b) => b[1] - a[1]);
+  }, [pagosVista]);
+  const movimientosDetalle = useMemo(
+    () => (medioDetalle ? pagosVista.filter((p) => p.medio_pago === medioDetalle) : []),
+    [pagosVista, medioDetalle]
+  );
+  const rowByReserva = useMemo(() => new Map(rows.map((r) => [r.id_reserva, r])), [rows]);
+
+  const openEdit = async (r: ControlOperativoRow) => {
+    setEditing({ ...r });
+    try {
+      const pagosReserva = await getReservaPagos(r.id_reserva);
+      const saldos = pagosReserva
+        .filter((p) => p.tipo_pago === "saldo")
+        .map((p) => ({ monto: p.monto, medio_pago: p.medio_pago }));
+      setSplits(saldos.length ? saldos : r.pago_saldo > 0 ? [{ monto: r.pago_saldo, medio_pago: r.medio_saldo }] : [{ monto: 0, medio_pago: "" }]);
+    } catch {
+      setSplits(r.pago_saldo > 0 ? [{ monto: r.pago_saldo, medio_pago: r.medio_saldo }] : [{ monto: 0, medio_pago: "" }]);
+    }
+  };
+
+  const totalSplit = splits.reduce((s, p) => s + saved(p.monto), 0);
+  const pendienteEdit = editing ? Math.max(0, saved(editing.total) - saved(editing.abono) - totalSplit) : 0;
+
+  const save = async () => {
+    if (!editing) return;
+    const invalid = splits.some((p) => (saved(p.monto) > 0 && !p.medio_pago) || (p.medio_pago && saved(p.monto) <= 0));
+    if (invalid) {
+      setError("Cada pago de saldo debe tener un valor mayor a cero y un medio de pago.");
+      return;
+    }
+    if (saved(editing.abono) + totalSplit > saved(editing.total)) {
+      setError("El abono y los pagos de saldo no pueden superar el valor total de la reserva.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    try {
+      await updateControlReserva(editing.id_reserva, {
+        id_plan: editing.id_plan,
+        id_hora: editing.id_hora,
+        mina: editing.mina,
+        refrigerio: editing.refrigerio,
+        restaurante: editing.restaurante || null,
+        valor_total: saved(editing.total),
+        valor_abonado: saved(editing.abono),
+        metodo_pago_abono: editing.medio_abono || null,
+        observacion: editing.observacion || null,
+      });
+      await replaceSaldoPagos(editing.id_reserva, splits);
+      if (editing.id_participante) {
+        await updateControlParticipante(editing.id_participante, {
+          nombre: editing.nombre || null,
+          edad: editing.edad === ("" as any) ? null : editing.edad,
+          nacionalidad: editing.nacionalidad || null,
+          numero_documento: editing.documento || null,
+          telefono_participante: phone(editing.contacto) !== phone(editing.contacto_cliente) ? editing.contacto.trim() || null : null,
+          tipo_almuerzo: editing.almuerzo.trim() || null,
+        });
+      }
+      setEditing(null);
+      await load(true);
+    } catch (e: any) {
+      setError(e?.message || "No fue posible guardar los cambios.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const clear = () => {
+    setSearch("");
+    setFecha("");
+    setPlan("");
+    setHora("");
+    setMina("");
+    setRefrigerio("");
+    setRestaurante("");
+    setAlmuerzo("");
+    setSaldo("");
+    setMedioDetalle(null);
+  };
+
+  if (loading) return <div className="op-loading">Cargando control operativo…</div>;
+
+  let prev: number | null = null;
+
+  return (
+    <div className="op-page">
+      <div className="op-head">
+        <div><h1>Control Operativo</h1><p>Vista consolidada de reservas, participantes, servicios y pagos.</p></div>
+        <div className="op-head-actions">
+          <button className="op-btn secondary" onClick={() => load(true)}><RefreshCw size={16} className={refreshing ? "spin-icon" : ""}/> Actualizar</button>
+          <button className="op-btn primary" onClick={() => window.print()}><Download size={16}/> Exportar</button>
+        </div>
+      </div>
+
+      {error && <div className="op-error">{error}</div>}
+
+      <div className="op-filters">
+        <div className="op-search"><Search size={16}/><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar código, nombre, documento…"/></div>
+        <label><span>Fecha reserva</span><input type="date" value={fecha} onChange={(e) => { setFecha(e.target.value); setMedioDetalle(null); }}/></label>
+        <label><span>Plan</span><select value={plan} onChange={(e) => setPlan(e.target.value)}><option value="">Todos</option>{planes.map((x) => <option key={x}>{x}</option>)}</select></label>
+        <label><span>Horario</span><select value={hora} onChange={(e) => setHora(e.target.value)}><option value="">Todos</option>{horas.map((x) => <option key={x}>{x}</option>)}</select></label>
+        <label><span>Mina</span><select value={mina} onChange={(e) => setMina(e.target.value)}><option value="">Todos</option><option value="si">Sí</option><option value="no">No</option></select></label>
+        <label><span>Refrigerio</span><select value={refrigerio} onChange={(e) => setRefrigerio(e.target.value)}><option value="">Todos</option><option value="si">Sí</option><option value="no">No</option></select></label>
+        <label><span>Restaurante</span><select value={restaurante} onChange={(e) => setRestaurante(e.target.value)}><option value="">Todos</option>{restaurantes.map((x) => <option key={x}>{x}</option>)}</select></label>
+        <label><span>Almuerzo</span><select value={almuerzo} onChange={(e) => setAlmuerzo(e.target.value)}><option value="">Todos</option><option value="si">Con almuerzo</option><option value="no">Sin almuerzo</option></select></label>
+        <label><span>Saldo</span><select value={saldo} onChange={(e) => setSaldo(e.target.value)}><option value="">Todos</option><option value="pendiente">Pendiente</option><option value="pagado">Pagado</option></select></label>
+        <button className="op-clear" onClick={clear}><X size={14}/> Limpiar</button>
+      </div>
+
+      <div className="op-summary">
+        <span><Filter size={14}/>{filtered.length} filas</span>
+        <span>{reservas.length} reservas</span>
+        <span>Ventas: <b>{money(reservas.reduce((s, r) => s + r.total, 0))}</b></span>
+        <span>Saldo pendiente: <b>{money(reservas.reduce((s, r) => s + r.saldo_pendiente, 0))}</b></span>
+      </div>
+
+      {fecha && (
+        <section className="op-cash-day">
+          <div><strong>Recaudo de las reservas del {fmt(fecha)}</strong><small>Haz clic en un medio para ver exactamente de qué reservas salió el dinero.</small></div>
+          <div className="op-cash-items">
+            {cajaMedios.length ? cajaMedios.map(([m, v]) => (
+              <button type="button" className="op-cash-card" key={m} onClick={() => setMedioDetalle(m)}><span>{m}</span><b>{money(v)}</b><small>Ver detalle</small></button>
+            )) : <span className="op-cash-empty">No hay movimientos de saldo registrados para estas reservas.</span>}
+            <div className="op-cash-total"><span>Total registrado</span><b>{money(cajaMedios.reduce((s, [, v]) => s + v, 0))}</b></div>
+          </div>
+        </section>
+      )}
+
+      <div className="op-table-wrap">
+        <table className="op-table">
+          <thead><tr><th>Código</th><th>Plan</th><th>Fecha</th><th>Hora</th><th>Nombre</th><th>Edad</th><th>Nacionalidad</th><th>Documento</th><th>Contacto</th><th>Cant.</th><th>Mina</th><th>Refrigerio</th><th>Restaurante</th><th>Almuerzo</th><th>Total</th><th>Abono</th><th>Medio abono</th><th>Pago saldo</th><th>Medio saldo</th><th>Pendiente</th><th>Observación</th><th>Acciones</th></tr></thead>
+          <tbody>{filtered.map((r, i) => { const first = prev !== r.id_reserva; prev = r.id_reserva; return <tr key={`${r.id_reserva}-${r.id_participante ?? i}`} className={first ? "group-start" : ""}><td><strong>{r.reserva_codigo}</strong></td><td>{r.plan}</td><td>{fmt(r.fecha)}</td><td>{hk(r.hora) || "—"}</td><td>{r.nombre}</td><td>{r.edad ?? "—"}</td><td>{r.nacionalidad}</td><td>{r.documento}</td><td>{r.contacto}</td><td>{first ? r.cantidad : ""}</td><td>{r.mina ? "SI" : "NO"}</td><td>{r.refrigerio ? "SI" : "NO"}</td><td>{r.restaurante || "—"}</td><td>{r.almuerzo || "—"}</td><td>{first ? money(r.total) : ""}</td><td>{first ? money(r.abono) : ""}</td><td>{first ? r.medio_abono : ""}</td><td>{first ? money(r.pago_saldo) : ""}</td><td>{first ? (r.medio_saldo || (r.pago_saldo > 0 ? "Varios medios" : "")) : ""}</td><td className={r.saldo_pendiente > 0 ? "pending-money" : "paid-money"}>{first ? money(r.saldo_pendiente) : ""}</td><td>{first ? r.observacion : ""}</td><td><button className="op-icon-btn" onClick={() => openEdit(r)}><Pencil size={15}/></button></td></tr>; })}</tbody>
+        </table>
+      </div>
+
+      {medioDetalle && <div className="op-modal-backdrop" onMouseDown={() => setMedioDetalle(null)}><div className="op-modal op-cash-detail-modal" onMouseDown={(e) => e.stopPropagation()}><div className="op-modal-head"><div><h2>Detalle de recaudo · {medioDetalle}</h2><p>{fecha ? `Reservas del ${fmt(fecha)}` : "Reservas filtradas"} · Total {money(movimientosDetalle.reduce((s, p) => s + p.monto, 0))}</p></div><button onClick={() => setMedioDetalle(null)}><X/></button></div><div className="op-cash-detail-body"><table className="op-cash-detail-table"><thead><tr><th>Reserva</th><th>Cliente / participante</th><th>Plan</th><th>Fecha reserva</th><th>Hora</th><th>Tipo</th><th>Registrado</th><th>Valor</th></tr></thead><tbody>{movimientosDetalle.map((p, i) => { const r = rowByReserva.get(p.id_reserva); return <tr key={p.id_pago ?? i}><td><strong>{r?.reserva_codigo || `#${p.id_reserva}`}</strong></td><td>{r?.nombre || r?.contacto_cliente || "—"}</td><td>{r?.plan || "—"}</td><td>{r?.fecha ? fmt(r.fecha) : "—"}</td><td>{r?.hora ? hk(r.hora) : "—"}</td><td>{p.tipo_pago === "saldo" ? "Saldo" : "Abono"}</td><td>{fmtPago(p.fecha_pago)}</td><td><strong>{money(p.monto)}</strong></td></tr>; })}</tbody></table>{!movimientosDetalle.length && <div className="op-cash-empty-detail">No hay movimientos para este medio.</div>}</div><div className="op-cash-detail-footer"><span>{movimientosDetalle.length} movimiento{movimientosDetalle.length === 1 ? "" : "s"}</span><strong>Total: {money(movimientosDetalle.reduce((s, p) => s + p.monto, 0))}</strong></div></div></div>}
+
+      {editing && <div className="op-modal-backdrop"><div className="op-modal edit-modal"><div className="op-modal-head"><div><h2>Edición operativa</h2><p>Participante de la reserva {editing.reserva_codigo}</p></div><button onClick={() => setEditing(null)}><X/></button></div><div className="op-edit-grid"><label>Código<input value={editing.reserva_codigo} readOnly/></label><label>Fecha<input value={fmt(editing.fecha)} readOnly/></label><label>Plan<select value={editing.id_plan ?? ""} onChange={(e) => setEditing({ ...editing, id_plan: e.target.value ? Number(e.target.value) : null })}>{planOpts.map(([id, n]) => <option key={id} value={id}>{n}</option>)}</select></label><label>Hora<select value={editing.id_hora ?? ""} onChange={(e) => setEditing({ ...editing, id_hora: e.target.value ? Number(e.target.value) : null })}><option value="">Sin hora</option>{horaOpts.map(([id, h]) => <option key={id} value={id}>{hk(h)}</option>)}</select></label><label>Nombre<input value={editing.nombre} onChange={(e) => setEditing({ ...editing, nombre: e.target.value })}/></label><label>Edad<input inputMode="numeric" value={editing.edad ?? ""} onChange={(e) => setEditing({ ...editing, edad: num(e.target.value) })}/></label><label>Nacionalidad<input value={editing.nacionalidad} onChange={(e) => setEditing({ ...editing, nacionalidad: e.target.value })}/></label><label>Documento<input value={editing.documento} onChange={(e) => setEditing({ ...editing, documento: e.target.value })}/></label><label>Contacto<input value={editing.contacto} onChange={(e) => setEditing({ ...editing, contacto: e.target.value })}/></label><label>Restaurante<select value={editing.restaurante} onChange={(e) => setEditing({ ...editing, restaurante: e.target.value })}><option value="">Sin restaurante</option>{restaurantes.map((x) => <option key={x}>{x}</option>)}</select></label><label>Almuerzo<input value={editing.almuerzo} onChange={(e) => setEditing({ ...editing, almuerzo: e.target.value })}/></label><label>Total<input inputMode="numeric" value={editing.total} onChange={(e) => setEditing({ ...editing, total: num(e.target.value) })}/></label><label>Abono<input inputMode="numeric" value={editing.abono} onChange={(e) => setEditing({ ...editing, abono: num(e.target.value) })}/></label><label>Medio abono<select value={editing.medio_abono} onChange={(e) => setEditing({ ...editing, medio_abono: e.target.value })}><option value="">Sin método</option>{metodos.map((x) => <option key={x}>{x}</option>)}</select></label><div className="op-checks"><label><input type="checkbox" checked={!!editing.mina} onChange={(e) => setEditing({ ...editing, mina: e.target.checked })}/> Mina</label><label><input type="checkbox" checked={!!editing.refrigerio} onChange={(e) => setEditing({ ...editing, refrigerio: e.target.checked })}/> Refrigerio</label></div><div className="op-payments full"><div className="op-payments-head"><div><strong>Pagos del saldo</strong><small>Puede dividir el saldo entre varios medios de pago.</small></div><button className="op-btn secondary" onClick={() => setSplits([...splits, { monto: 0, medio_pago: "" }])}><Plus size={15}/> Añadir medio</button></div>{splits.map((p, i) => <div className="op-payment-row" key={i}><label>Valor<input inputMode="numeric" value={p.monto || ""} onChange={(e) => setSplits(splits.map((x, j) => j === i ? { ...x, monto: num(e.target.value) } : x))}/></label><label>Medio<select value={p.medio_pago} onChange={(e) => setSplits(splits.map((x, j) => j === i ? { ...x, medio_pago: e.target.value } : x))}><option value="">Seleccione</option>{metodos.map((x) => <option key={x}>{x}</option>)}</select></label><button className="op-remove-payment" onClick={() => setSplits(splits.filter((_, j) => j !== i))} title="Quitar"><Trash2 size={16}/></button></div>)}<div className="op-payment-totals"><span>Saldo pagado: <b>{money(totalSplit)}</b></span><span>Pendiente: <b>{money(pendienteEdit)}</b></span></div></div><label className="full">Observación<textarea rows={3} value={editing.observacion} onChange={(e) => setEditing({ ...editing, observacion: e.target.value })}/></label></div><div className="op-modal-footer"><button className="op-btn secondary" onClick={() => setEditing(null)}>Cancelar</button><button className="op-btn primary" disabled={saving} onClick={save}><SlidersHorizontal size={16}/>{saving ? "Guardando…" : "Guardar cambios"}</button></div></div></div>}
+    </div>
+  );
 }
