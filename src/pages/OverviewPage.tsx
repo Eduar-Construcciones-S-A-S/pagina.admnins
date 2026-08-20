@@ -5,12 +5,13 @@ import { supabase } from "../lib/supabase";
 import { getDashboardAnalytics, type DashboardAnalyticsData, type DashboardPlan, type DashboardReserva } from "../services/dashboardAnalytics.service";
 import "../styles/overview-crm.css";
 
-const EMPTY_DATA: DashboardAnalyticsData = { reservas: [], planes: [], clientes: [], participantes: [] };
+const EMPTY_DATA: DashboardAnalyticsData = { reservas: [], planes: [], clientes: [], participantes: [], pagos: [], metodosPago: [] };
 const money = (value: number) => `$${Math.round(value || 0).toLocaleString("es-CO")}`;
 const pct = (value: number) => `${Number.isFinite(value) ? value.toFixed(1) : "0.0"}%`;
 const dateKey = (value?: string | null) => value ? value.slice(0, 10) : "";
 const normalize = (value: unknown) => String(value ?? "").trim().toLowerCase();
 const monthKey = (value?: string | null) => value ? value.slice(0, 7) : "";
+const methodLabel = (value: string) => value.replace(/\b\w/g, c => c.toUpperCase());
 
 function planName(r: DashboardReserva, planes: DashboardPlan[]) {
   return r.plan?.nombre_plan || planes.find((p) => p.id_plan === r.id_plan)?.nombre_plan || `Plan #${r.id_plan ?? "—"}`;
@@ -24,7 +25,6 @@ function totalReserva(r: DashboardReserva, planes: DashboardPlan[]) {
   const precioPlan = Number(r.plan?.precio_plan || planes.find((p) => p.id_plan === r.id_plan)?.precio_plan || 0);
   return precioPlan * cantidad;
 }
-function cobradoReserva(r: DashboardReserva) { return Number(r.valor_abonado || 0) + Number(r.valor_saldo_pagado || 0); }
 function growth(current: number, previous: number) { if (previous === 0) return current > 0 ? 100 : 0; return ((current - previous) / previous) * 100; }
 function toInputDate(d: Date) { const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,"0"); const day=String(d.getDate()).padStart(2,"0"); return `${y}-${m}-${day}`; }
 function addDays(date: Date, days: number) { const d = new Date(date); d.setDate(d.getDate()+days); return d; }
@@ -58,11 +58,22 @@ export default function OverviewPage() {
     const client = supabase; if (!client) return;
     const channel = client.channel("crm-dashboard-live")
       .on("postgres_changes", { event: "*", schema: "public", table: "reserva" }, () => load(true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "reserva_pago" }, () => load(true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "medio_pago_config" }, () => load(true))
       .on("postgres_changes", { event: "*", schema: "public", table: "plan" }, () => load(true))
       .on("postgres_changes", { event: "*", schema: "public", table: "cliente" }, () => load(true))
       .on("postgres_changes", { event: "*", schema: "public", table: "participante" }, () => load(true)).subscribe();
     return () => { client.removeChannel(channel); };
   }, [load]);
+
+  const pagosPorReserva = useMemo(() => {
+    const map = new Map<number, typeof data.pagos>();
+    for (const p of data.pagos) {
+      if (!map.has(p.id_reserva)) map.set(p.id_reserva, []);
+      map.get(p.id_reserva)!.push(p);
+    }
+    return map;
+  }, [data.pagos]);
 
   const resolvedRange = useMemo(() => {
     const now = new Date(); const today = toInputDate(now);
@@ -80,19 +91,50 @@ export default function OverviewPage() {
     if (statusFilter === "approved" && r.aprobado !== true) return false;
     if (statusFilter === "pending" && r.aprobado === true) return false;
     if (planFilter && String(r.id_plan ?? "") !== planFilter) return false;
-    if (paymentFilter) { const a=normalize(r.metodo_pago_abono); const s=normalize(r.metodo_pago_saldo); if (a !== paymentFilter && s !== paymentFilter) return false; }
+    if (paymentFilter) {
+      const abonoMatch = normalize(r.metodo_pago_abono) === paymentFilter && Number(r.valor_abonado || 0) > 0;
+      const legacySaldoMatch = normalize(r.metodo_pago_saldo) === paymentFilter && Number(r.valor_saldo_pagado || 0) > 0;
+      const movimientoMatch = (pagosPorReserva.get(r.id_reserva) || []).some(p => p.medio_pago === paymentFilter && p.monto > 0);
+      if (!abonoMatch && !legacySaldoMatch && !movimientoMatch) return false;
+    }
     const referenceDate = dateKey(r.aprobado === true ? (r.fecha_aprobacion || r.fecha_solicitud) : r.fecha_solicitud);
     if (resolvedRange.from && (!referenceDate || referenceDate < resolvedRange.from)) return false;
     if (resolvedRange.to && (!referenceDate || referenceDate > resolvedRange.to)) return false;
     return true;
-  }), [data.reservas, statusFilter, planFilter, paymentFilter, resolvedRange]);
+  }), [data.reservas, statusFilter, planFilter, paymentFilter, resolvedRange, pagosPorReserva]);
 
   const metrics = useMemo(() => {
     const planes = data.planes;
     const aprobadas = filteredReservas.filter(r => r.aprobado === true);
     const pendientes = filteredReservas.filter(r => r.aprobado !== true);
     const ventasTotal = aprobadas.reduce((s,r) => s + totalReserva(r,planes), 0);
-    const totalCobrado = aprobadas.reduce((s,r) => s + cobradoReserva(r), 0);
+
+    const recaudoMap = new Map<string,number>();
+    let totalCobrado = 0;
+    for (const r of aprobadas) {
+      const abono = Number(r.valor_abonado || 0);
+      const medioAbono = normalize(r.metodo_pago_abono);
+      if (abono > 0) {
+        totalCobrado += abono;
+        if (medioAbono) recaudoMap.set(medioAbono, (recaudoMap.get(medioAbono) || 0) + abono);
+      }
+
+      const saldoMovs = (pagosPorReserva.get(r.id_reserva) || []).filter(p => p.tipo_pago === "saldo" && p.monto > 0);
+      if (saldoMovs.length) {
+        for (const p of saldoMovs) {
+          totalCobrado += p.monto;
+          recaudoMap.set(p.medio_pago, (recaudoMap.get(p.medio_pago) || 0) + p.monto);
+        }
+      } else {
+        const saldoLegacy = Number(r.valor_saldo_pagado || 0);
+        const medioSaldo = normalize(r.metodo_pago_saldo);
+        if (saldoLegacy > 0) {
+          totalCobrado += saldoLegacy;
+          if (medioSaldo) recaudoMap.set(medioSaldo, (recaudoMap.get(medioSaldo) || 0) + saldoLegacy);
+        }
+      }
+    }
+    const recaudoPorMedio = [...recaudoMap.entries()].sort((a,b)=>b[1]-a[1]);
     const cartera = Math.max(0, ventasTotal-totalCobrado);
     const ticketPromedio = aprobadas.length ? ventasTotal/aprobadas.length : 0;
     const conversion = filteredReservas.length ? aprobadas.length/filteredReservas.length*100 : 0;
@@ -112,8 +154,6 @@ export default function OverviewPage() {
 
     const ranking=buildRanking(aprobadas);
     const mejorPlan=ranking.find(p=>p.reservas>0)||null;
-    const efectivo=aprobadas.reduce((s,r)=>s+(normalize(r.metodo_pago_abono)==="efectivo"?Number(r.valor_abonado||0):0)+(normalize(r.metodo_pago_saldo)==="efectivo"?Number(r.valor_saldo_pagado||0):0),0);
-    const transferencia=aprobadas.reduce((s,r)=>s+(normalize(r.metodo_pago_abono)==="transferencia"?Number(r.valor_abonado||0):0)+(normalize(r.metodo_pago_saldo)==="transferencia"?Number(r.valor_saldo_pagado||0):0),0);
 
     const dayMap=new Map<string,{key:string;ventas:number;personas:number;ingresos:number}>();
     for (const r of aprobadas) {
@@ -135,11 +175,11 @@ export default function OverviewPage() {
 
     const thisFrom=toInputDate(new Date(now.getFullYear(),now.getMonth(),1)); const thisTo=toInputDate(now);
     const prevFrom=toInputDate(new Date(now.getFullYear(),now.getMonth()-1,1)); const prevTo=toInputDate(new Date(now.getFullYear(),now.getMonth(),0));
-    const thisMonthRevenue=allApproved.filter(r=>{const d=dateKey(r.fecha_aprobacion);return d>=thisFrom&&d<=thisTo;}).reduce((s,r)=>s+totalReserva(r,planes),0);
-    const prevMonthRevenue=allApproved.filter(r=>{const d=dateKey(r.fecha_aprobacion);return d>=prevFrom&&d<=prevTo;}).reduce((s,r)=>s+totalReserva(r,planes),0);
+    const thisMonthRevenue=allApproved.filter(r=>{const d=dateKey(r.fecha_aprobacion||r.fecha_solicitud);return d>=thisFrom&&d<=thisTo;}).reduce((s,r)=>s+totalReserva(r,planes),0);
+    const prevMonthRevenue=allApproved.filter(r=>{const d=dateKey(r.fecha_aprobacion||r.fecha_solicitud);return d>=prevFrom&&d<=prevTo;}).reduce((s,r)=>s+totalReserva(r,planes),0);
 
-    return { aprobadas:aprobadas.length, pendientes:pendientes.length, ventasTotal,totalCobrado,cartera,ticketPromedio,conversion,ocupacionVendida,ranking,mejorPlan,efectivo,transferencia,daily,monthly,historicalRanking,revenueGrowth:growth(thisMonthRevenue,prevMonthRevenue),thisMonthRevenue,prevMonthRevenue };
-  }, [filteredReservas, data.planes, data.reservas]);
+    return { aprobadas:aprobadas.length, pendientes:pendientes.length, ventasTotal,totalCobrado,cartera,ticketPromedio,conversion,ocupacionVendida,ranking,mejorPlan,recaudoPorMedio,daily,monthly,historicalRanking,revenueGrowth:growth(thisMonthRevenue,prevMonthRevenue),thisMonthRevenue,prevMonthRevenue };
+  }, [filteredReservas, data.planes, data.reservas, pagosPorReserva]);
 
   const maxDaily=Math.max(1,...metrics.daily.map(d=>d.ingresos));
   const maxMonthly=Math.max(1,...metrics.monthly.map(d=>d.ingresos));
@@ -158,7 +198,7 @@ export default function OverviewPage() {
       {period==="custom"&&<><label><span>Desde</span><input type="date" value={fromDate} onChange={e=>setFromDate(e.target.value)}/></label><label><span>Hasta</span><input type="date" value={toDate} onChange={e=>setToDate(e.target.value)}/></label></>}
       <label><span>Plan</span><select value={planFilter} onChange={e=>setPlanFilter(e.target.value)}><option value="">Todos los planes</option>{data.planes.map(p=><option key={p.id_plan} value={p.id_plan}>{p.nombre_plan}</option>)}</select></label>
       <label><span>Estado</span><select value={statusFilter} onChange={e=>setStatusFilter(e.target.value as StatusFilter)}><option value="all">Todas</option><option value="approved">Aprobadas</option><option value="pending">Pendientes</option></select></label>
-      <label><span>Medio de pago</span><select value={paymentFilter} onChange={e=>setPaymentFilter(e.target.value)}><option value="">Todos</option><option value="efectivo">Efectivo</option><option value="transferencia">Transferencia</option></select></label>
+      <label><span>Medio de pago</span><select value={paymentFilter} onChange={e=>setPaymentFilter(e.target.value)}><option value="">Todos</option>{data.metodosPago.map(m=><option key={m} value={m}>{methodLabel(m)}</option>)}</select></label>
       <button className="crm-filter-clear" onClick={clearFilters} disabled={!filtersActive}><X size={14}/> Limpiar</button>
     </div><div className="crm-filter-result">Mostrando <b>{filteredReservas.length}</b> reservas · rango {resolvedRange.from||"inicio"} a {resolvedRange.to||"hoy"}</div></section>
 
@@ -166,7 +206,7 @@ export default function OverviewPage() {
 
     <div className="crm-decision-strip"><div className="crm-decision-main"><div className={`crm-growth-icon ${metrics.revenueGrowth>=0?"positive":"negative"}`}>{metrics.revenueGrowth>=0?<TrendingUp size={22}/>:<TrendingDown size={22}/>}</div><div><span>Ventas del mes</span><strong>{money(metrics.thisMonthRevenue)}</strong><small className={metrics.revenueGrowth>=0?"positive-text":"negative-text"}>{metrics.revenueGrowth>=0?"+":""}{pct(metrics.revenueGrowth)} vs. mes anterior ({money(metrics.prevMonthRevenue)})</small></div></div><div className="crm-decision-item"><Trophy size={18}/><div><span>Plan líder filtrado</span><strong>{metrics.mejorPlan?.nombre||"Sin ventas"}</strong><small>{metrics.mejorPlan?`${money(metrics.mejorPlan.ingresos)} · ${metrics.mejorPlan.reservas} reservas`:"Sin resultados"}</small></div></div><div className="crm-decision-item"><Users size={18}/><div><span>Clientes</span><strong>{data.clientes.length}</strong><small>{data.clientes.filter(c=>c.atencion_humana).length} requieren atención</small></div></div><div className="crm-decision-item"><Clock3 size={18}/><div><span>Pendientes filtradas</span><strong>{metrics.pendientes}</strong><small>Reservas por convertir</small></div></div></div>
 
-    <div className="crm-grid crm-grid-main"><section className="crm-card crm-monthly-card"><div className="crm-card-head"><div><span className="crm-card-kicker">Ventas por día</span><h2>Ingresos diarios</h2><p>Últimos 14 días con ventas dentro del filtro seleccionado.</p></div><CalendarDays size={20}/></div>{!metrics.daily.length?<div className="crm-empty">No hay ventas aprobadas en este periodo.</div>:<div className="crm-chart crm-daily-chart">{metrics.daily.map(d=><div className="crm-month" key={d.key}><div className="crm-month-value">{money(d.ingresos)}</div><div className="crm-bar-track"><div className="crm-bar" style={{height:`${Math.max(8,d.ingresos/maxDaily*100)}%`}}/></div><strong>{displayShortDate(d.key)}</strong><span>{d.ventas} vtas · {d.personas} pers.</span></div>)}</div>}</section><section className="crm-card crm-cash-card"><div className="crm-card-head"><div><span className="crm-card-kicker">Caja</span><h2>Recaudo y cartera</h2><p>Valores del filtro actual.</p></div><Banknote size={20}/></div><div className="crm-cash-total"><span>Recaudado</span><strong>{money(metrics.totalCobrado)}</strong><small>de {money(metrics.ventasTotal)} vendidos</small></div><div className="crm-progress"><div style={{width:`${metrics.ventasTotal?Math.min(100,metrics.totalCobrado/metrics.ventasTotal*100):0}%`}}/></div><div className="crm-cash-grid"><div><span>Efectivo</span><strong>{money(metrics.efectivo)}</strong></div><div><span>Transferencia</span><strong>{money(metrics.transferencia)}</strong></div><div className="pending"><span>Pendiente</span><strong>{money(metrics.cartera)}</strong></div></div></section></div>
+    <div className="crm-grid crm-grid-main"><section className="crm-card crm-monthly-card"><div className="crm-card-head"><div><span className="crm-card-kicker">Ventas por día</span><h2>Ingresos diarios</h2><p>Últimos 14 días con ventas dentro del filtro seleccionado.</p></div><CalendarDays size={20}/></div>{!metrics.daily.length?<div className="crm-empty">No hay ventas aprobadas en este periodo.</div>:<div className="crm-chart crm-daily-chart">{metrics.daily.map(d=><div className="crm-month" key={d.key}><div className="crm-month-value">{money(d.ingresos)}</div><div className="crm-bar-track"><div className="crm-bar" style={{height:`${Math.max(8,d.ingresos/maxDaily*100)}%`}}/></div><strong>{displayShortDate(d.key)}</strong><span>{d.ventas} vtas · {d.personas} pers.</span></div>)}</div>}</section><section className="crm-card crm-cash-card"><div className="crm-card-head"><div><span className="crm-card-kicker">Caja</span><h2>Recaudo y cartera</h2><p>Valores reales por medio de pago del filtro actual.</p></div><Banknote size={20}/></div><div className="crm-cash-total"><span>Recaudado</span><strong>{money(metrics.totalCobrado)}</strong><small>de {money(metrics.ventasTotal)} vendidos</small></div><div className="crm-progress"><div style={{width:`${metrics.ventasTotal?Math.min(100,metrics.totalCobrado/metrics.ventasTotal*100):0}%`}}/></div><div className="crm-cash-grid">{metrics.recaudoPorMedio.map(([medio,valor])=><div key={medio}><span>{methodLabel(medio)}</span><strong>{money(valor)}</strong></div>)}{!metrics.recaudoPorMedio.length&&<div><span>Sin recaudo</span><strong>$0</strong></div>}<div className="pending"><span>Pendiente</span><strong>{money(metrics.cartera)}</strong></div></div></section></div>
 
     <section className="crm-card crm-monthly-card"><div className="crm-card-head"><div><span className="crm-card-kicker">Evolución histórica</span><h2>Progresión de ventas · 6 meses</h2><p>Se conserva la vista mensual para comparar el avance comercial en el tiempo.</p></div><CalendarDays size={20}/></div><div className="crm-chart">{metrics.monthly.map(m=><div className="crm-month" key={m.key}><div className="crm-month-value">{m.ingresos?money(m.ingresos):"$0"}</div><div className="crm-bar-track"><div className="crm-bar" style={{height:`${Math.max(m.ingresos>0?8:2,m.ingresos/maxMonthly*100)}%`}}/></div><strong>{m.label}</strong><span>{m.ventas} ventas · {m.personas} pers.</span></div>)}</div></section>
 
