@@ -70,7 +70,7 @@ export default function ControlOperativoPage() {
 
   const planes = useMemo(() => [...new Set(rows.map((r) => r.plan).filter(Boolean))].sort(), [rows]);
   const horas = useMemo(() => [...new Set(rows.map((r) => hk(r.hora)).filter(Boolean))].sort(), [rows]);
-  const planOpts = useMemo(() => [...new Map(rows.filter((r) => r.id_plan != null).map((r) => [r.id_plan!, r.plan])).entries()], [rows]);
+  const planOpts = useMemo(() => [...new Map(codigos.filter((c) => c.activo && c.id_plan != null && c.plan?.nombre_plan).map((c) => [c.id_plan!, c.plan!.nombre_plan])).entries()].sort((a,b)=>a[1].localeCompare(b[1])), [codigos]);
   const horaOpts = useMemo(() => [...new Map(rows.filter((r) => r.id_hora != null).map((r) => [r.id_hora!, r.hora])).entries()], [rows]);
 
   const filtered = useMemo(() => rows.filter((r) => {
@@ -121,8 +121,7 @@ export default function ControlOperativoPage() {
     if(invalid){setError("Cada pago de saldo debe tener un valor mayor a cero y un medio de pago.");return;}
     if(saved(editing.abono)+totalSplit>saved(editing.total)){setError("El abono y los pagos de saldo no pueden superar el valor total de la reserva.");return;}
     if(!editing.id_plan){setError("Selecciona un plan válido.");return;}
-    if(editing.incluye_almuerzo&&!editing.restaurante){setError("Selecciona restaurante cuando la reserva incluye almuerzo.");return;}
-    if(!editing.id_codigo_operativo){setError("No hay un CH compatible. Configura o vincula el código en Códigos operativos.");return;}
+    if(!editing.id_codigo_operativo){setError("No hay un CH compatible. Revisa Plan, Almuerzo y Restaurante o vincula el CH en Códigos operativos.");return;}
 
     setSaving(true);setError(null);
     try {
@@ -168,10 +167,10 @@ export default function ControlOperativoPage() {
       <div className="op-edit-grid">
         <label>Código actual<input value={editing.reserva_codigo} readOnly/></label>
         <label>Fecha<input value={fmt(editing.fecha)} readOnly/></label>
-        <label>Plan<select value={editing.id_plan??""} onChange={(e)=>{const id=e.target.value?Number(e.target.value):null;setEditing(syncCH({...editing,id_plan:id}))}}>{planOpts.map(([id,n])=><option key={id} value={id}>{n}</option>)}</select></label>
+        <label>Plan<select value={editing.id_plan??""} onChange={(e)=>{const id=e.target.value?Number(e.target.value):null;const name=planOpts.find(([planId])=>planId===id)?.[1]??editing.plan;setEditing(syncCH({...editing,id_plan:id,plan:name}))}}>{planOpts.map(([id,n])=><option key={id} value={id}>{n}</option>)}</select></label>
         <label>CH operativo<select value={editing.id_codigo_operativo??""} onChange={(e)=>setEditing({...editing,id_codigo_operativo:e.target.value?Number(e.target.value):null})}><option value="">Sin CH compatible</option>{chOptions.map((c)=><option key={c.id_codigo_operativo} value={c.id_codigo_operativo}>{c.codigo_ch} — {c.descripcion}</option>)}</select></label>
         <label>Incluye almuerzo<select value={editing.incluye_almuerzo?"si":"no"} onChange={(e)=>{const yes=e.target.value==="si";setEditing(syncCH({...editing,incluye_almuerzo:yes,restaurante:yes?editing.restaurante:""}))}}><option value="no">No</option><option value="si">Sí</option></select></label>
-        <label>Restaurante<select disabled={!editing.incluye_almuerzo} value={editing.restaurante} onChange={(e)=>setEditing(syncCH({...editing,restaurante:e.target.value}))}><option value="">Sin restaurante</option>{restaurantes.map((x)=><option key={x}>{x}</option>)}</select></label>
+        <label>Restaurante<select disabled={!editing.incluye_almuerzo} value={editing.restaurante} onChange={(e)=>setEditing(syncCH({...editing,restaurante:e.target.value}))}><option value="">General / sin restaurante específico</option>{restaurantes.map((x)=><option key={x}>{x}</option>)}</select></label>
         <label>Hora<select value={editing.id_hora??""} onChange={(e)=>setEditing({...editing,id_hora:e.target.value?Number(e.target.value):null})}><option value="">Sin hora</option>{horaOpts.map(([id,h])=><option key={id} value={id}>{hk(h)}</option>)}</select></label>
         <label>Nombre<input value={editing.nombre} onChange={(e)=>setEditing({...editing,nombre:e.target.value})}/></label>
         <label>Edad<input inputMode="numeric" value={editing.edad??""} onChange={(e)=>setEditing({...editing,edad:num(e.target.value)})}/></label>
