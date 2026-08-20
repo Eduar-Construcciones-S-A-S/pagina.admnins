@@ -39,23 +39,15 @@ export async function getDashboardAnalytics():Promise<DashboardAnalyticsData>{
   if(participantesResult.error) throw participantesResult.error;
   if(pagosResult.error) throw pagosResult.error;
 
-  const reservas=((reservasResult.data??[]) as any[]).map(r=>{
-    const fechaReserva=String(r.plan_fechas?.fecha??"").slice(0,10)||null;
-    return {
-      ...r,
-      fecha_reserva:fechaReserva,
-      // Para el resumen comercial usamos la fecha real de la experiencia reservada.
-      // El componente existente usa fecha_aprobacion como fecha de referencia;
-      // se normaliza aquí para que filtros, ventas diarias y gráficas coincidan
-      // con Control Operativo y con plan_fechas.
-      fecha_aprobacion:fechaReserva||r.fecha_aprobacion,
-      valor_total:Number(r.valor_total||0),
-      valor_abonado:Number(r.valor_abonado||0),
-      valor_saldo_pagado:Number(r.valor_saldo_pagado||0),
-      metodo_pago_abono:cleanMethod(r.metodo_pago_abono)||null,
-      metodo_pago_saldo:cleanMethod(r.metodo_pago_saldo)||null,
-    };
-  }) as DashboardReserva[];
+  const reservas=((reservasResult.data??[]) as any[]).map(r=>({
+    ...r,
+    fecha_reserva:String(r.plan_fechas?.fecha??"").slice(0,10)||null,
+    valor_total:Number(r.valor_total||0),
+    valor_abonado:Number(r.valor_abonado||0),
+    valor_saldo_pagado:Number(r.valor_saldo_pagado||0),
+    metodo_pago_abono:cleanMethod(r.metodo_pago_abono)||null,
+    metodo_pago_saldo:cleanMethod(r.metodo_pago_saldo)||null,
+  })) as DashboardReserva[];
 
   const pagos=((pagosResult.data??[]) as any[]).map(p=>({
     id_pago:p.id_pago==null?undefined:Number(p.id_pago),
