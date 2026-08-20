@@ -8,12 +8,212 @@ function getClient() {
 /* ─── PLANES ─────────────────────────────────────────────── */
 
 export async function getPlanes() {
-  const { data, error } = await getClient().from("plan").select(`*, plan_fechas (*), plan_horas (*)`).order("id_plan", { ascending: true });
-  if (error) throw error; return data ?? [];
+  const { data, error } = await getClient()
+    .from("plan")
+    .select(`*, plan_fechas (*), plan_horas (*)`)
+    .order("id_plan", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
 }
-export async function createPlan(payload:any){const{plan_fechas,plan_horas,...planData}=payload;const{data:plan,error:planError}=await getClient().from("plan").insert(planData).select().single();if(planError)throw planError;if(plan_fechas?.length){const{error}=await getClient().from("plan_fechas").insert(plan_fechas.map((f:any)=>({fecha:f.fecha,id_plan:plan.id_plan})));if(error)throw error}if(plan_horas?.length){const{error}=await getClient().from("plan_horas").insert(plan_horas.map((h:any)=>({hora:h.hora,id_plan:plan.id_plan})));if(error)throw error}return plan}
-export async function updatePlan(id:number,payload:any){const{plan_fechas,plan_horas,...planData}=payload;const{data:plan,error:planError}=await getClient().from("plan").update(planData).eq("id_plan",id).select().single();if(planError)throw planError;const{error:df}=await getClient().from("plan_fechas").delete().eq("id_plan",id);if(df)throw df;if(plan_fechas?.length){const{error}=await getClient().from("plan_fechas").insert(plan_fechas.map((f:any)=>({fecha:f.fecha,id_plan:id})));if(error)throw error}const{error:dh}=await getClient().from("plan_horas").delete().eq("id_plan",id);if(dh)throw dh;if(plan_horas?.length){const{error}=await getClient().from("plan_horas").insert(plan_horas.map((h:any)=>({hora:h.hora,id_plan:id})));if(error)throw error}return plan}
-export async function deletePlan(id:number){const{error}=await getClient().from("plan").delete().eq("id_plan",id);if(error)throw error}
+
+export async function createPlan(payload: any) {
+  const { plan_fechas, plan_horas, ...planData } = payload;
+  const { data: plan, error: planError } = await getClient().from("plan").insert(planData).select().single();
+  if (planError) throw planError;
+
+  if (plan_fechas?.length) {
+    const { error } = await getClient()
+      .from("plan_fechas")
+      .insert(plan_fechas.map((f: any) => ({ fecha: f.fecha, id_plan: plan.id_plan })));
+    if (error) throw error;
+  }
+
+  if (plan_horas?.length) {
+    const { error } = await getClient()
+      .from("plan_horas")
+      .insert(plan_horas.map((h: any) => ({ hora: h.hora, id_plan: plan.id_plan })));
+    if (error) throw error;
+  }
+
+  return plan;
+}
+
+type PlanFechaInput = { id_fecha?: number; fecha: string };
+type PlanHoraInput = { id_hora?: number; hora: string };
+
+async function syncPlanFechas(idPlan: number, incoming: PlanFechaInput[] = []) {
+  const db = getClient();
+  const { data: existing, error } = await db
+    .from("plan_fechas")
+    .select("id_fecha,id_plan,fecha")
+    .eq("id_plan", idPlan)
+    .order("id_fecha", { ascending: true });
+  if (error) throw error;
+
+  const current = existing ?? [];
+  const currentById = new Map(current.map((row: any) => [Number(row.id_fecha), row]));
+  const currentByFecha = new Map(current.map((row: any) => [String(row.fecha), row]));
+
+  const resolved = incoming
+    .filter((f) => String(f?.fecha ?? "").trim())
+    .map((f) => {
+      const byId = f.id_fecha != null ? currentById.get(Number(f.id_fecha)) : null;
+      const byFecha = currentByFecha.get(String(f.fecha));
+      return { ...f, existing: byId ?? byFecha ?? null };
+    });
+
+  const idsToKeep = new Set<number>();
+  const idsChanging = new Set<number>();
+
+  for (const item of resolved) {
+    if (item.existing) {
+      const id = Number(item.existing.id_fecha);
+      idsToKeep.add(id);
+      if (String(item.existing.fecha) !== String(item.fecha)) idsChanging.add(id);
+    }
+  }
+
+  const idsToDelete = current
+    .map((row: any) => Number(row.id_fecha))
+    .filter((id: number) => !idsToKeep.has(id));
+
+  const protectedIds = [...new Set([...idsChanging, ...idsToDelete])];
+  if (protectedIds.length) {
+    const { data: refs, error: refsError } = await db
+      .from("reserva")
+      .select("id_reserva,id_fecha,codigo_reserva")
+      .in("id_fecha", protectedIds)
+      .limit(1);
+    if (refsError) throw refsError;
+    if (refs?.length) {
+      throw new Error(
+        `No se puede cambiar o eliminar una fecha que ya está usada por la reserva ${refs[0].codigo_reserva || `#${refs[0].id_reserva}`}. Puedes agregar fechas nuevas sin eliminar la fecha ya reservada.`
+      );
+    }
+  }
+
+  for (const item of resolved) {
+    if (item.existing) {
+      if (String(item.existing.fecha) !== String(item.fecha)) {
+        const { error: updateError } = await db
+          .from("plan_fechas")
+          .update({ fecha: item.fecha })
+          .eq("id_fecha", item.existing.id_fecha);
+        if (updateError) throw updateError;
+      }
+    } else {
+      const { error: insertError } = await db
+        .from("plan_fechas")
+        .insert({ id_plan: idPlan, fecha: item.fecha });
+      if (insertError) throw insertError;
+    }
+  }
+
+  if (idsToDelete.length) {
+    const { error: deleteError } = await db.from("plan_fechas").delete().in("id_fecha", idsToDelete);
+    if (deleteError) throw deleteError;
+  }
+}
+
+async function syncPlanHoras(idPlan: number, incoming: PlanHoraInput[] = []) {
+  const db = getClient();
+  const { data: existing, error } = await db
+    .from("plan_horas")
+    .select("id_hora,id_plan,hora")
+    .eq("id_plan", idPlan)
+    .order("id_hora", { ascending: true });
+  if (error) throw error;
+
+  const current = existing ?? [];
+  const normalizeHora = (v: unknown) => String(v ?? "").slice(0, 5);
+  const currentById = new Map(current.map((row: any) => [Number(row.id_hora), row]));
+  const currentByHora = new Map(current.map((row: any) => [normalizeHora(row.hora), row]));
+
+  const resolved = incoming
+    .filter((h) => normalizeHora(h?.hora))
+    .map((h) => {
+      const byId = h.id_hora != null ? currentById.get(Number(h.id_hora)) : null;
+      const byHora = currentByHora.get(normalizeHora(h.hora));
+      return { ...h, hora: normalizeHora(h.hora), existing: byId ?? byHora ?? null };
+    });
+
+  const idsToKeep = new Set<number>();
+  const idsChanging = new Set<number>();
+
+  for (const item of resolved) {
+    if (item.existing) {
+      const id = Number(item.existing.id_hora);
+      idsToKeep.add(id);
+      if (normalizeHora(item.existing.hora) !== item.hora) idsChanging.add(id);
+    }
+  }
+
+  const idsToDelete = current
+    .map((row: any) => Number(row.id_hora))
+    .filter((id: number) => !idsToKeep.has(id));
+
+  const protectedIds = [...new Set([...idsChanging, ...idsToDelete])];
+  if (protectedIds.length) {
+    const { data: refs, error: refsError } = await db
+      .from("reserva")
+      .select("id_reserva,id_hora,codigo_reserva")
+      .in("id_hora", protectedIds)
+      .limit(1);
+    if (refsError) throw refsError;
+    if (refs?.length) {
+      throw new Error(
+        `No se puede cambiar o eliminar una hora que ya está usada por la reserva ${refs[0].codigo_reserva || `#${refs[0].id_reserva}`}. Puedes agregar horarios nuevos sin eliminar el horario ya reservado.`
+      );
+    }
+  }
+
+  for (const item of resolved) {
+    if (item.existing) {
+      if (normalizeHora(item.existing.hora) !== item.hora) {
+        const { error: updateError } = await db
+          .from("plan_horas")
+          .update({ hora: item.hora })
+          .eq("id_hora", item.existing.id_hora);
+        if (updateError) throw updateError;
+      }
+    } else {
+      const { error: insertError } = await db
+        .from("plan_horas")
+        .insert({ id_plan: idPlan, hora: item.hora });
+      if (insertError) throw insertError;
+    }
+  }
+
+  if (idsToDelete.length) {
+    const { error: deleteError } = await db.from("plan_horas").delete().in("id_hora", idsToDelete);
+    if (deleteError) throw deleteError;
+  }
+}
+
+export async function updatePlan(id: number, payload: any) {
+  const { plan_fechas = [], plan_horas = [], ...planData } = payload;
+
+  // Antes se borraban TODAS las fechas y horas y se volvían a insertar.
+  // Eso rompía las reservas que apuntan a id_fecha / id_hora mediante FK.
+  // Ahora preservamos los IDs existentes y solo modificamos lo necesario.
+  await syncPlanFechas(id, plan_fechas);
+  await syncPlanHoras(id, plan_horas);
+
+  const { data: plan, error: planError } = await getClient()
+    .from("plan")
+    .update(planData)
+    .eq("id_plan", id)
+    .select()
+    .single();
+  if (planError) throw planError;
+
+  return plan;
+}
+
+export async function deletePlan(id: number) {
+  const { error } = await getClient().from("plan").delete().eq("id_plan", id);
+  if (error) throw error;
+}
 
 /* ─── CLIENTES ───────────────────────────────────────────── */
 export async function getClientes(){const{data,error}=await getClient().from("cliente").select("telefono, atencion_humana, etapaconversacion, id_plan").order("telefono",{ascending:true});if(error)throw error;return data??[]}
