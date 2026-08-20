@@ -62,19 +62,14 @@ export async function getControlOperativo(): Promise<ControlOperativoRow[]> {
 }
 
 export async function getReservaPagos(idReserva:number):Promise<ReservaPago[]>{const {data,error}=await client().from("reserva_pago").select("id_pago,id_reserva,tipo_pago,monto,medio_pago,fecha_pago,observacion").eq("id_reserva",idReserva).order("fecha_pago",{ascending:true});if(error)throw error;return (data??[]).map((p:any)=>({...p,monto:num(p.monto)})) as ReservaPago[];}
+export async function getPagosControlOperativo():Promise<ReservaPago[]>{const {data,error}=await client().from("reserva_pago").select("id_pago,id_reserva,tipo_pago,monto,medio_pago,fecha_pago,observacion").order("fecha_pago",{ascending:false});if(error)throw error;return (data??[]).map((p:any)=>({...p,id_reserva:Number(p.id_reserva),monto:num(p.monto)})) as ReservaPago[];}
 export async function getRecaudoDiario():Promise<RecaudoDiario[]>{const {data,error}=await client().from("recaudo_diario").select("fecha,medio_pago,tipo_pago,total,cantidad_movimientos").order("fecha",{ascending:false});if(error)throw error;return (data??[]).map((r:any)=>({...r,total:num(r.total),cantidad_movimientos:num(r.cantidad_movimientos)})) as RecaudoDiario[];}
 
 export async function replaceSaldoPagos(idReserva:number,pagos:Array<{monto:number;medio_pago:string}>){
   const validos=pagos.filter(p=>num(p.monto)>0&&text(p.medio_pago).trim());
   const total=validos.reduce((s,p)=>s+num(p.monto),0);
   const {error:deleteError}=await client().from("reserva_pago").delete().eq("id_reserva",idReserva).eq("tipo_pago","saldo"); if(deleteError)throw deleteError;
-  if(validos.length){
-    const {error:insertError}=await client().from("reserva_pago").insert(validos.map(p=>({id_reserva:idReserva,tipo_pago:"saldo",monto:num(p.monto),medio_pago:p.medio_pago.trim()})));
-    if(insertError)throw insertError;
-  }
-  // metodo_pago_saldo es un ENUM y no admite valores inventados como "multiple".
-  // El detalle real de uno o varios medios queda en reserva_pago. Para compatibilidad,
-  // reserva conserva el total y solo guarda metodo_pago_saldo cuando existe un único medio.
+  if(validos.length){const {error:insertError}=await client().from("reserva_pago").insert(validos.map(p=>({id_reserva:idReserva,tipo_pago:"saldo",monto:num(p.monto),medio_pago:p.medio_pago.trim()})));if(insertError)throw insertError;}
   const metodo=validos.length===1?validos[0].medio_pago:null;
   const {error:updateError}=await client().from("reserva").update({valor_saldo_pagado:total,metodo_pago_saldo:metodo}).eq("id_reserva",idReserva);if(updateError)throw updateError;
   return total;
