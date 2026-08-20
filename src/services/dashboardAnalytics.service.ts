@@ -26,20 +26,18 @@ const cleanMethod=(value:unknown)=>String(value??"").trim().toLowerCase();
 
 export async function getDashboardAnalytics():Promise<DashboardAnalyticsData>{
   const db=client();
-  const [reservasResult,planesResult,clientesResult,participantesResult,pagosResult,metodosResult]=await Promise.all([
+  const [reservasResult,planesResult,clientesResult,participantesResult,pagosResult]=await Promise.all([
     db.from("reserva").select(`id_reserva,fecha_solicitud,fecha_aprobacion,telefono_cliente,id_plan,cantidad_personas,aprobado,precio_unitario,valor_total,valor_abonado,valor_saldo_pagado,metodo_pago_abono,metodo_pago_saldo,plan (id_plan,nombre_plan,precio_plan)`).order("id_reserva",{ascending:false}),
     db.from("plan").select("id_plan, nombre_plan, precio_plan").order("id_plan",{ascending:true}),
     db.from("cliente").select("telefono, atencion_humana, etapaconversacion"),
     db.from("participante").select("id_participante, id_reserva"),
     db.from("reserva_pago").select("id_pago,id_reserva,tipo_pago,monto,medio_pago,fecha_pago").order("fecha_pago",{ascending:false}),
-    db.from("medio_pago_config").select("valor,activo").eq("activo",true).order("valor",{ascending:true}),
   ]);
   if(reservasResult.error) throw reservasResult.error;
   if(planesResult.error) throw planesResult.error;
   if(clientesResult.error) throw clientesResult.error;
   if(participantesResult.error) throw participantesResult.error;
   if(pagosResult.error) throw pagosResult.error;
-  if(metodosResult.error) throw metodosResult.error;
 
   const reservas=((reservasResult.data??[]) as any[]).map(r=>({
     ...r,
@@ -59,12 +57,13 @@ export async function getDashboardAnalytics():Promise<DashboardAnalyticsData>{
     fecha_pago:p.fecha_pago??null,
   })).filter(p=>p.id_reserva>0&&p.monto>0&&p.medio_pago) as DashboardPago[];
 
-  const configurados=((metodosResult.data??[]) as any[]).map(x=>cleanMethod(x.valor)).filter(Boolean);
+  // El resumen no depende de medio_pago_config para cargar.
+  // Los medios disponibles se derivan de los valores realmente usados en reservas y movimientos de pago.
   const usados=[
     ...reservas.flatMap(r=>[cleanMethod(r.metodo_pago_abono),cleanMethod(r.metodo_pago_saldo)]),
     ...pagos.map(p=>p.medio_pago),
   ].filter(Boolean);
-  const metodosPago=[...new Set([...configurados,...usados])].sort((a,b)=>a.localeCompare(b,"es"));
+  const metodosPago=[...new Set(usados)].sort((a,b)=>a.localeCompare(b,"es"));
 
   return {
     reservas,
