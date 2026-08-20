@@ -17,7 +17,8 @@ export async function getPlanes() {
 }
 
 export async function createPlan(payload: any) {
-  const { plan_fechas, plan_horas, ...planData } = payload;
+  const { plan_fechas, plan_horas, ...rawPlanData } = payload;
+  const planData = sanitizePlanData(rawPlanData);
   const { data: plan, error: planError } = await getClient().from("plan").insert(planData).select().single();
   if (planError) throw planError;
 
@@ -41,7 +42,28 @@ export async function createPlan(payload: any) {
 type PlanFechaInput = { id_fecha?: number; fecha: string };
 type PlanHoraInput = { id_hora?: number; hora: string };
 
-async function syncPlanFechas(idPlan: number, incoming: PlanFechaInput[] = []) {
+function sanitizePlanData(raw: Record<string, any>) {
+  const allowed = [
+    "nombre_plan",
+    "precio_plan",
+    "descripcion_basica",
+    "descripcion_detallada",
+    "imagen_url",
+    "numero_plan",
+    "tipo_fecha",
+    "tipo_hora",
+  ] as const;
+
+  const clean: Record<string, any> = {};
+  for (const key of allowed) {
+    if (Object.prototype.hasOwnProperty.call(raw, key) && raw[key] !== undefined) {
+      clean[key] = raw[key];
+    }
+  }
+  return clean;
+}
+
+async function syncPlanFechas(idPlan: number, incoming: PlanFechaInput[] = [], preserveWhenEmpty = false) {
   const db = getClient();
   const { data: existing, error } = await db
     .from("plan_fechas")
@@ -51,16 +73,20 @@ async function syncPlanFechas(idPlan: number, incoming: PlanFechaInput[] = []) {
   if (error) throw error;
 
   const current = existing ?? [];
+  const validIncoming = incoming.filter((f) => String(f?.fecha ?? "").trim());
+
+  // Para planes que pasan a "cualquier día", no borramos fechas históricas.
+  // Las reservas existentes pueden seguir apuntando a esos id_fecha por FK.
+  if (preserveWhenEmpty && validIncoming.length === 0) return;
+
   const currentById = new Map(current.map((row: any) => [Number(row.id_fecha), row]));
   const currentByFecha = new Map(current.map((row: any) => [String(row.fecha), row]));
 
-  const resolved = incoming
-    .filter((f) => String(f?.fecha ?? "").trim())
-    .map((f) => {
-      const byId = f.id_fecha != null ? currentById.get(Number(f.id_fecha)) : null;
-      const byFecha = currentByFecha.get(String(f.fecha));
-      return { ...f, existing: byId ?? byFecha ?? null };
-    });
+  const resolved = validIncoming.map((f) => {
+    const byId = f.id_fecha != null ? currentById.get(Number(f.id_fecha)) : null;
+    const byFecha = currentByFecha.get(String(f.fecha));
+    return { ...f, existing: byId ?? byFecha ?? null };
+  });
 
   const idsToKeep = new Set<number>();
   const idsChanging = new Set<number>();
@@ -115,7 +141,7 @@ async function syncPlanFechas(idPlan: number, incoming: PlanFechaInput[] = []) {
   }
 }
 
-async function syncPlanHoras(idPlan: number, incoming: PlanHoraInput[] = []) {
+async function syncPlanHoras(idPlan: number, incoming: PlanHoraInput[] = [], preserveWhenEmpty = false) {
   const db = getClient();
   const { data: existing, error } = await db
     .from("plan_horas")
@@ -126,16 +152,19 @@ async function syncPlanHoras(idPlan: number, incoming: PlanHoraInput[] = []) {
 
   const current = existing ?? [];
   const normalizeHora = (v: unknown) => String(v ?? "").slice(0, 5);
+  const validIncoming = incoming.filter((h) => normalizeHora(h?.hora));
+
+  // Igual que con fechas: conservar ids históricos si el plan queda "sin hora".
+  if (preserveWhenEmpty && validIncoming.length === 0) return;
+
   const currentById = new Map(current.map((row: any) => [Number(row.id_hora), row]));
   const currentByHora = new Map(current.map((row: any) => [normalizeHora(row.hora), row]));
 
-  const resolved = incoming
-    .filter((h) => normalizeHora(h?.hora))
-    .map((h) => {
-      const byId = h.id_hora != null ? currentById.get(Number(h.id_hora)) : null;
-      const byHora = currentByHora.get(normalizeHora(h.hora));
-      return { ...h, hora: normalizeHora(h.hora), existing: byId ?? byHora ?? null };
-    });
+  const resolved = validIncoming.map((h) => {
+    const byId = h.id_hora != null ? currentById.get(Number(h.id_hora)) : null;
+    const byHora = currentByHora.get(normalizeHora(h.hora));
+    return { ...h, hora: normalizeHora(h.hora), existing: byId ?? byHora ?? null };
+  });
 
   const idsToKeep = new Set<number>();
   const idsChanging = new Set<number>();
@@ -191,23 +220,26 @@ async function syncPlanHoras(idPlan: number, incoming: PlanHoraInput[] = []) {
 }
 
 export async function updatePlan(id: number, payload: any) {
-  const { plan_fechas = [], plan_horas = [], ...planData } = payload;
+  const { plan_fechas = [], plan_horas = [], ...rawPlanData } = payload;
+  const planData = sanitizePlanData(rawPlanData);
+  const preserveFechas = planData.tipo_fecha === "cualquier_dia";
+  const preserveHoras = planData.tipo_hora === "sin_hora";
 
-  // Antes se borraban TODAS las fechas y horas y se volvían a insertar.
-  // Eso rompía las reservas que apuntan a id_fecha / id_hora mediante FK.
-  // Ahora preservamos los IDs existentes y solo modificamos lo necesario.
-  await syncPlanFechas(id, plan_fechas);
-  await syncPlanHoras(id, plan_horas);
-
-  const { data: plan, error: planError } = await getClient()
+  // Primero actualizamos únicamente columnas reales y editables del plan.
+  // Esto evita enviar campos legados/relacionales que puedan provocar 400.
+  const { data: rows, error: planError } = await getClient()
     .from("plan")
     .update(planData)
     .eq("id_plan", id)
-    .select()
-    .single();
+    .select();
   if (planError) throw planError;
+  if (!rows?.length) throw new Error("No se pudo actualizar el plan. Verifica permisos de edición.");
 
-  return plan;
+  // Después sincronizamos disponibilidad conservando IDs usados por reservas.
+  await syncPlanFechas(id, plan_fechas, preserveFechas);
+  await syncPlanHoras(id, plan_horas, preserveHoras);
+
+  return rows[0];
 }
 
 export async function deletePlan(id: number) {
