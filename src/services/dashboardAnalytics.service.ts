@@ -2,8 +2,8 @@ import { supabase } from "../lib/supabase";
 
 export interface DashboardPlan { id_plan:number; nombre_plan:string; precio_plan?:number|null; }
 export interface DashboardReserva {
-  id_reserva:number; fecha_solicitud?:string|null; fecha_aprobacion?:string|null; telefono_cliente?:string|null;
-  id_plan?:number|null; cantidad_personas?:number|null; aprobado?:boolean|null; precio_unitario?:number|null;
+  id_reserva:number; fecha_solicitud?:string|null; fecha_aprobacion?:string|null; fecha_reserva?:string|null; telefono_cliente?:string|null;
+  id_plan?:number|null; id_fecha?:number|null; cantidad_personas?:number|null; aprobado?:boolean|null; precio_unitario?:number|null;
   valor_total?:number|null; valor_abonado?:number|null; valor_saldo_pagado?:number|null;
   metodo_pago_abono?:string|null; metodo_pago_saldo?:string|null; plan?:DashboardPlan|null;
 }
@@ -27,7 +27,7 @@ const cleanMethod=(value:unknown)=>String(value??"").trim().toLowerCase();
 export async function getDashboardAnalytics():Promise<DashboardAnalyticsData>{
   const db=client();
   const [reservasResult,planesResult,clientesResult,participantesResult,pagosResult]=await Promise.all([
-    db.from("reserva").select(`id_reserva,fecha_solicitud,fecha_aprobacion,telefono_cliente,id_plan,cantidad_personas,aprobado,precio_unitario,valor_total,valor_abonado,valor_saldo_pagado,metodo_pago_abono,metodo_pago_saldo,plan (id_plan,nombre_plan,precio_plan)`).order("id_reserva",{ascending:false}),
+    db.from("reserva").select(`id_reserva,fecha_solicitud,fecha_aprobacion,telefono_cliente,id_plan,id_fecha,cantidad_personas,aprobado,precio_unitario,valor_total,valor_abonado,valor_saldo_pagado,metodo_pago_abono,metodo_pago_saldo,plan (id_plan,nombre_plan,precio_plan),plan_fechas (id_fecha,fecha)`).order("id_reserva",{ascending:false}),
     db.from("plan").select("id_plan, nombre_plan, precio_plan").order("id_plan",{ascending:true}),
     db.from("cliente").select("telefono, atencion_humana, etapaconversacion"),
     db.from("participante").select("id_participante, id_reserva"),
@@ -39,14 +39,23 @@ export async function getDashboardAnalytics():Promise<DashboardAnalyticsData>{
   if(participantesResult.error) throw participantesResult.error;
   if(pagosResult.error) throw pagosResult.error;
 
-  const reservas=((reservasResult.data??[]) as any[]).map(r=>({
-    ...r,
-    valor_total:Number(r.valor_total||0),
-    valor_abonado:Number(r.valor_abonado||0),
-    valor_saldo_pagado:Number(r.valor_saldo_pagado||0),
-    metodo_pago_abono:cleanMethod(r.metodo_pago_abono)||null,
-    metodo_pago_saldo:cleanMethod(r.metodo_pago_saldo)||null,
-  })) as DashboardReserva[];
+  const reservas=((reservasResult.data??[]) as any[]).map(r=>{
+    const fechaReserva=String(r.plan_fechas?.fecha??"").slice(0,10)||null;
+    return {
+      ...r,
+      fecha_reserva:fechaReserva,
+      // Para el resumen comercial usamos la fecha real de la experiencia reservada.
+      // El componente existente usa fecha_aprobacion como fecha de referencia;
+      // se normaliza aquí para que filtros, ventas diarias y gráficas coincidan
+      // con Control Operativo y con plan_fechas.
+      fecha_aprobacion:fechaReserva||r.fecha_aprobacion,
+      valor_total:Number(r.valor_total||0),
+      valor_abonado:Number(r.valor_abonado||0),
+      valor_saldo_pagado:Number(r.valor_saldo_pagado||0),
+      metodo_pago_abono:cleanMethod(r.metodo_pago_abono)||null,
+      metodo_pago_saldo:cleanMethod(r.metodo_pago_saldo)||null,
+    };
+  }) as DashboardReserva[];
 
   const pagos=((pagosResult.data??[]) as any[]).map(p=>({
     id_pago:p.id_pago==null?undefined:Number(p.id_pago),
@@ -57,8 +66,6 @@ export async function getDashboardAnalytics():Promise<DashboardAnalyticsData>{
     fecha_pago:p.fecha_pago??null,
   })).filter(p=>p.id_reserva>0&&p.monto>0&&p.medio_pago) as DashboardPago[];
 
-  // El resumen no depende de medio_pago_config para cargar.
-  // Los medios disponibles se derivan de los valores realmente usados en reservas y movimientos de pago.
   const usados=[
     ...reservas.flatMap(r=>[cleanMethod(r.metodo_pago_abono),cleanMethod(r.metodo_pago_saldo)]),
     ...pagos.map(p=>p.medio_pago),
