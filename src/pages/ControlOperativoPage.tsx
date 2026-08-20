@@ -40,6 +40,7 @@ export default function ControlOperativoPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [modalError, setModalError] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
   const [fecha, setFecha] = useState("");
@@ -71,7 +72,11 @@ export default function ControlOperativoPage() {
   const planes = useMemo(() => [...new Set(rows.map((r) => r.plan).filter(Boolean))].sort(), [rows]);
   const horas = useMemo(() => [...new Set(rows.map((r) => hk(r.hora)).filter(Boolean))].sort(), [rows]);
   const planOpts = useMemo(() => [...new Map(codigos.filter((c) => c.activo && c.id_plan != null && c.plan?.nombre_plan).map((c) => [c.id_plan!, c.plan!.nombre_plan])).entries()].sort((a,b)=>a[1].localeCompare(b[1])), [codigos]);
-  const horaOpts = useMemo(() => [...new Map(rows.filter((r) => r.id_hora != null).map((r) => [r.id_hora!, r.hora])).entries()], [rows]);
+  const planMeta = useMemo(() => editing?.id_plan == null ? null : codigos.find((c)=>c.activo && c.id_plan===editing.id_plan && c.plan)?.plan ?? null, [codigos,editing?.id_plan]);
+  const horaOpts = useMemo(() => {
+    if (!planMeta || planMeta.tipo_hora === "sin_hora") return [];
+    return (planMeta.plan_horas ?? []).map((h)=>[h.id_hora,h.hora] as [number,string]).sort((a,b)=>a[1].localeCompare(b[1]));
+  }, [planMeta]);
 
   const filtered = useMemo(() => rows.filter((r) => {
     const q = norm(search);
@@ -98,12 +103,59 @@ export default function ControlOperativoPage() {
   const chOptions = useMemo(() => editing ? codigosCompatibles(codigos, editing.id_plan, !!editing.incluye_almuerzo, editing.restaurante) : [], [codigos,editing]);
 
   const syncCH = (next: ControlOperativoRow) => {
+    const meta = next.id_plan == null ? null : codigos.find((c)=>c.activo && c.id_plan===next.id_plan && c.plan)?.plan ?? null;
+    const cantidad = Math.max(1, Number(next.cantidad || 1));
+    const precio = meta?.precio_plan == null ? null : Number(meta.precio_plan);
+    const total = precio != null && Number.isFinite(precio) ? precio * cantidad : next.total;
+
+    const planHoras = meta?.tipo_hora === "sin_hora" ? [] : (meta?.plan_horas ?? []);
+    let id_hora = next.id_hora;
+    let horaReserva = next.hora;
+    if (!planHoras.length) {
+      id_hora = null;
+      horaReserva = "";
+    } else if (!planHoras.some((h)=>h.id_hora===next.id_hora)) {
+      const sameClock = planHoras.find((h)=>hk(h.hora)===hk(next.hora));
+      const fallback = sameClock ?? (planHoras.length===1 ? planHoras[0] : undefined);
+      id_hora = fallback?.id_hora ?? null;
+      horaReserva = fallback?.hora ?? "";
+    }
+
     const compatibles = codigosCompatibles(codigos, next.id_plan, !!next.incluye_almuerzo, next.restaurante);
     const currentValid = compatibles.some((c)=>c.id_codigo_operativo===next.id_codigo_operativo);
-    return { ...next, id_codigo_operativo: currentValid ? next.id_codigo_operativo : (compatibles[0]?.id_codigo_operativo ?? null) };
+    return {
+      ...next,
+      total,
+      id_hora,
+      hora: horaReserva,
+      id_codigo_operativo: currentValid ? next.id_codigo_operativo : (compatibles[0]?.id_codigo_operativo ?? null),
+    };
+  };
+
+  const handlePlanChange = (id: number | null) => {
+    if (!editing) return;
+    const codesForPlan = codigos.filter((c)=>c.activo && c.id_plan===id);
+    const name = planOpts.find(([planId])=>planId===id)?.[1] ?? editing.plan;
+    let next: ControlOperativoRow = { ...editing, id_plan:id, plan:name };
+
+    if (!codigosCompatibles(codigos,id,!!next.incluye_almuerzo,next.restaurante).length && codesForPlan.length) {
+      const exactRestaurant = codesForPlan.find((c)=>c.restaurante && norm(c.restaurante)===norm(next.restaurante));
+      const preferred = exactRestaurant ?? [...codesForPlan].sort((a,b)=>b.prioridad-a.prioridad)[0];
+      next = {
+        ...next,
+        incluye_almuerzo: preferred.incluye_almuerzo,
+        restaurante: preferred.incluye_almuerzo ? (preferred.restaurante ?? next.restaurante) : "",
+        id_codigo_operativo: preferred.id_codigo_operativo,
+      };
+    }
+
+    setModalError(null);
+    setEditing(syncCH(next));
   };
 
   const openEdit = async (r: ControlOperativoRow) => {
+    setError(null);
+    setModalError(null);
     setEditing(syncCH({ ...r }));
     try {
       const pagosReserva=await getReservaPagos(r.id_reserva);
@@ -113,24 +165,27 @@ export default function ControlOperativoPage() {
   };
 
   const totalSplit=splits.reduce((s,p)=>s+saved(p.monto),0);
-  const pendienteEdit=editing?Math.max(0,saved(editing.total)-saved(editing.abono)-totalSplit):0;
+  const totalPagado=editing?saved(editing.abono)+totalSplit:0;
+  const pendienteEdit=editing?Math.max(0,saved(editing.total)-totalPagado):0;
+  const pagoExcedeTotal=!!editing&&totalPagado>saved(editing.total);
 
   const save = async () => {
     if (!editing) return;
     const invalid=splits.some((p)=>(saved(p.monto)>0&&!p.medio_pago)||(p.medio_pago&&saved(p.monto)<=0));
-    if(invalid){setError("Cada pago de saldo debe tener un valor mayor a cero y un medio de pago.");return;}
-    if(saved(editing.abono)+totalSplit>saved(editing.total)){setError("El abono y los pagos de saldo no pueden superar el valor total de la reserva.");return;}
-    if(!editing.id_plan){setError("Selecciona un plan válido.");return;}
-    if(!editing.id_codigo_operativo){setError("No hay un CH compatible. Revisa Plan, Almuerzo y Restaurante o vincula el CH en Códigos operativos.");return;}
+    if(invalid){setModalError("Cada pago de saldo debe tener un valor mayor a cero y un medio de pago.");return;}
+    if(totalPagado>saved(editing.total)){setModalError(`Hay ${money(totalPagado)} registrados, pero el nuevo total del plan es ${money(saved(editing.total))}. Ajusta los pagos o el total antes de guardar.`);return;}
+    if(!editing.id_plan){setModalError("Selecciona un plan válido.");return;}
+    if(!editing.id_codigo_operativo){setModalError("No hay un CH compatible. Revisa Plan, Almuerzo y Restaurante o vincula el CH en Códigos operativos.");return;}
+    if(planMeta?.tipo_hora!=="sin_hora" && (planMeta?.plan_horas?.length||0)>0 && !editing.id_hora){setModalError("Selecciona un horario válido para el nuevo plan.");return;}
 
-    setSaving(true);setError(null);
+    setSaving(true);setModalError(null);
     try {
       await cambiarCodigoOperativoReserva({id_reserva:editing.id_reserva,id_plan:editing.id_plan,incluye_almuerzo:!!editing.incluye_almuerzo,restaurante:editing.incluye_almuerzo?editing.restaurante:null,id_codigo_operativo:editing.id_codigo_operativo});
       await updateControlReserva(editing.id_reserva,{id_hora:editing.id_hora,mina:editing.mina,refrigerio:editing.refrigerio,valor_total:saved(editing.total),valor_abonado:saved(editing.abono),metodo_pago_abono:editing.medio_abono||null,observacion:editing.observacion||null});
       await replaceSaldoPagos(editing.id_reserva,splits);
       if(editing.id_participante){await updateControlParticipante(editing.id_participante,{nombre:editing.nombre||null,edad:editing.edad===("" as any)?null:editing.edad,nacionalidad:editing.nacionalidad||null,numero_documento:editing.documento||null,telefono_participante:phone(editing.contacto)!==phone(editing.contacto_cliente)?editing.contacto.trim()||null:null,tipo_almuerzo:editing.almuerzo.trim()||null});}
       setEditing(null);await load(true);
-    } catch(e:any){setError(e?.message||"No fue posible guardar los cambios.");}
+    } catch(e:any){setModalError(e?.message||"No fue posible guardar los cambios.");}
     finally{setSaving(false);}
   };
 
@@ -140,7 +195,7 @@ export default function ControlOperativoPage() {
 
   return <div className="op-page">
     <div className="op-head"><div><h1>Control Operativo</h1><p>Vista consolidada de reservas, participantes, servicios, códigos CH y pagos.</p></div><div className="op-head-actions"><button className="op-btn secondary" onClick={()=>load(true)}><RefreshCw size={16} className={refreshing?"spin-icon":""}/> Actualizar</button><button className="op-btn primary" onClick={()=>window.print()}><Download size={16}/> Exportar</button></div></div>
-    {error&&<div className="op-error">{error}</div>}
+    {error&&!editing&&<div className="op-error">{error}</div>}
 
     <div className="op-filters">
       <div className="op-search"><Search size={16}/><input value={search} onChange={(e)=>setSearch(e.target.value)} placeholder="Buscar código, nombre, documento…"/></div>
@@ -163,29 +218,31 @@ export default function ControlOperativoPage() {
 
     {medioDetalle&&<div className="op-modal-backdrop" onMouseDown={()=>setMedioDetalle(null)}><div className="op-modal op-cash-detail-modal" onMouseDown={(e)=>e.stopPropagation()}><div className="op-modal-head"><div><h2>Detalle de recaudo · {medioDetalle}</h2><p>{fecha?`Reservas del ${fmt(fecha)}`:"Reservas filtradas"} · Total {money(movimientosDetalle.reduce((s,p)=>s+p.monto,0))}</p></div><button onClick={()=>setMedioDetalle(null)}><X/></button></div><div className="op-cash-detail-body"><table className="op-cash-detail-table"><thead><tr><th>Reserva</th><th>Cliente / participante</th><th>Plan</th><th>Fecha reserva</th><th>Hora</th><th>Tipo</th><th>Registrado</th><th>Valor</th></tr></thead><tbody>{movimientosDetalle.map((p,i)=>{const r=rowByReserva.get(p.id_reserva);return <tr key={p.id_pago??i}><td><strong>{r?.reserva_codigo||`#${p.id_reserva}`}</strong></td><td>{r?.nombre||r?.contacto_cliente||"—"}</td><td>{r?.plan||"—"}</td><td>{r?.fecha?fmt(r.fecha):"—"}</td><td>{r?.hora?hk(r.hora):"—"}</td><td>{p.tipo_pago==="saldo"?"Saldo":"Abono"}</td><td>{fmtPago(p.fecha_pago)}</td><td><strong>{money(p.monto)}</strong></td></tr>})}</tbody></table>{!movimientosDetalle.length&&<div className="op-cash-empty-detail">No hay movimientos para este medio.</div>}</div><div className="op-cash-detail-footer"><span>{movimientosDetalle.length} movimiento{movimientosDetalle.length===1?"":"s"}</span><strong>Total: {money(movimientosDetalle.reduce((s,p)=>s+p.monto,0))}</strong></div></div></div>}
 
-    {editing&&<div className="op-modal-backdrop"><div className="op-modal edit-modal"><div className="op-modal-head"><div><h2>Edición operativa</h2><p>Reserva {editing.reserva_codigo}</p></div><button onClick={()=>setEditing(null)}><X/></button></div>
+    {editing&&<div className="op-modal-backdrop"><div className="op-modal edit-modal"><div className="op-modal-head"><div><h2>Edición operativa</h2><p>Reserva {editing.reserva_codigo}</p></div><button disabled={saving} onClick={()=>{setEditing(null);setModalError(null)}}><X/></button></div>
+      {modalError&&<div className="op-modal-error">{modalError}</div>}
+      {pagoExcedeTotal&&!modalError&&<div className="op-modal-warning">Los pagos registrados suman <strong>{money(totalPagado)}</strong>, pero el plan seleccionado vale <strong>{money(saved(editing.total))}</strong>. Si estás cambiando a un plan más económico, debes ajustar los pagos antes de guardar.</div>}
       <div className="op-edit-grid">
         <label>Código actual<input value={editing.reserva_codigo} readOnly/></label>
         <label>Fecha<input value={fmt(editing.fecha)} readOnly/></label>
-        <label>Plan<select value={editing.id_plan??""} onChange={(e)=>{const id=e.target.value?Number(e.target.value):null;const name=planOpts.find(([planId])=>planId===id)?.[1]??editing.plan;setEditing(syncCH({...editing,id_plan:id,plan:name}))}}>{planOpts.map(([id,n])=><option key={id} value={id}>{n}</option>)}</select></label>
-        <label>CH operativo<select value={editing.id_codigo_operativo??""} onChange={(e)=>setEditing({...editing,id_codigo_operativo:e.target.value?Number(e.target.value):null})}><option value="">Sin CH compatible</option>{chOptions.map((c)=><option key={c.id_codigo_operativo} value={c.id_codigo_operativo}>{c.codigo_ch} — {c.descripcion}</option>)}</select></label>
-        <label>Incluye almuerzo<select value={editing.incluye_almuerzo?"si":"no"} onChange={(e)=>{const yes=e.target.value==="si";setEditing(syncCH({...editing,incluye_almuerzo:yes,restaurante:yes?editing.restaurante:""}))}}><option value="no">No</option><option value="si">Sí</option></select></label>
-        <label>Restaurante<select disabled={!editing.incluye_almuerzo} value={editing.restaurante} onChange={(e)=>setEditing(syncCH({...editing,restaurante:e.target.value}))}><option value="">General / sin restaurante específico</option>{restaurantes.map((x)=><option key={x}>{x}</option>)}</select></label>
-        <label>Hora<select value={editing.id_hora??""} onChange={(e)=>setEditing({...editing,id_hora:e.target.value?Number(e.target.value):null})}><option value="">Sin hora</option>{horaOpts.map(([id,h])=><option key={id} value={id}>{hk(h)}</option>)}</select></label>
+        <label>Plan<select value={editing.id_plan??""} onChange={(e)=>handlePlanChange(e.target.value?Number(e.target.value):null)}>{planOpts.map(([id,n])=><option key={id} value={id}>{n}</option>)}</select></label>
+        <label>CH operativo<select value={editing.id_codigo_operativo??""} onChange={(e)=>{setModalError(null);setEditing({...editing,id_codigo_operativo:e.target.value?Number(e.target.value):null})}}><option value="">Sin CH compatible</option>{chOptions.map((c)=><option key={c.id_codigo_operativo} value={c.id_codigo_operativo}>{c.codigo_ch} — {c.descripcion}</option>)}</select></label>
+        <label>Incluye almuerzo<select value={editing.incluye_almuerzo?"si":"no"} onChange={(e)=>{const yes=e.target.value==="si";setModalError(null);setEditing(syncCH({...editing,incluye_almuerzo:yes,restaurante:yes?editing.restaurante:""}))}}><option value="no">No</option><option value="si">Sí</option></select></label>
+        <label>Restaurante<select disabled={!editing.incluye_almuerzo} value={editing.restaurante} onChange={(e)=>{setModalError(null);setEditing(syncCH({...editing,restaurante:e.target.value}))}}><option value="">General / sin restaurante específico</option>{restaurantes.map((x)=><option key={x}>{x}</option>)}</select></label>
+        <label>Hora<select value={editing.id_hora??""} onChange={(e)=>{const id=e.target.value?Number(e.target.value):null;const selected=horaOpts.find(([horaId])=>horaId===id);setModalError(null);setEditing({...editing,id_hora:id,hora:selected?.[1]??""})}}><option value="">Sin hora</option>{horaOpts.map(([id,h])=><option key={id} value={id}>{hk(h)}</option>)}</select></label>
         <label>Nombre<input value={editing.nombre} onChange={(e)=>setEditing({...editing,nombre:e.target.value})}/></label>
         <label>Edad<input inputMode="numeric" value={editing.edad??""} onChange={(e)=>setEditing({...editing,edad:num(e.target.value)})}/></label>
         <label>Nacionalidad<input value={editing.nacionalidad} onChange={(e)=>setEditing({...editing,nacionalidad:e.target.value})}/></label>
         <label>Documento<input value={editing.documento} onChange={(e)=>setEditing({...editing,documento:e.target.value})}/></label>
         <label>Contacto<input value={editing.contacto} onChange={(e)=>setEditing({...editing,contacto:e.target.value})}/></label>
         <label>Tipo almuerzo<input value={editing.almuerzo} onChange={(e)=>setEditing({...editing,almuerzo:e.target.value})} placeholder="Opcional"/></label>
-        <label>Total<input inputMode="numeric" value={editing.total} onChange={(e)=>setEditing({...editing,total:num(e.target.value)})}/></label>
-        <label>Abono<input inputMode="numeric" value={editing.abono} onChange={(e)=>setEditing({...editing,abono:num(e.target.value)})}/></label>
+        <label>Total<input inputMode="numeric" value={editing.total} onChange={(e)=>{setModalError(null);setEditing({...editing,total:num(e.target.value)})}}/></label>
+        <label>Abono<input inputMode="numeric" value={editing.abono} onChange={(e)=>{setModalError(null);setEditing({...editing,abono:num(e.target.value)})}}/></label>
         <label>Medio abono<select value={editing.medio_abono} onChange={(e)=>setEditing({...editing,medio_abono:e.target.value})}><option value="">Sin método</option>{metodos.map((x)=><option key={x}>{x}</option>)}</select></label>
         <div className="op-checks"><label><input type="checkbox" checked={!!editing.mina} onChange={(e)=>setEditing({...editing,mina:e.target.checked})}/> Mina</label><label><input type="checkbox" checked={!!editing.refrigerio} onChange={(e)=>setEditing({...editing,refrigerio:e.target.checked})}/> Refrigerio</label></div>
-        <div className="op-payments full"><div className="op-payments-head"><div><strong>Pagos del saldo</strong><small>Puede dividir el saldo entre varios medios de pago.</small></div><button className="op-btn secondary" onClick={()=>setSplits([...splits,{monto:0,medio_pago:""}])}><Plus size={15}/> Añadir medio</button></div>{splits.map((p,i)=><div className="op-payment-row" key={i}><label>Valor<input inputMode="numeric" value={p.monto||""} onChange={(e)=>setSplits(splits.map((x,j)=>j===i?{...x,monto:num(e.target.value)}:x))}/></label><label>Medio<select value={p.medio_pago} onChange={(e)=>setSplits(splits.map((x,j)=>j===i?{...x,medio_pago:e.target.value}:x))}><option value="">Seleccione</option>{metodos.map((x)=><option key={x}>{x}</option>)}</select></label><button className="op-remove-payment" onClick={()=>setSplits(splits.filter((_,j)=>j!==i))} title="Quitar"><Trash2 size={16}/></button></div>)}<div className="op-payment-totals"><span>Saldo pagado: <b>{money(totalSplit)}</b></span><span>Pendiente: <b>{money(pendienteEdit)}</b></span></div></div>
+        <div className="op-payments full"><div className="op-payments-head"><div><strong>Pagos del saldo</strong><small>Puede dividir el saldo entre varios medios de pago.</small></div><button className="op-btn secondary" onClick={()=>{setModalError(null);setSplits([...splits,{monto:0,medio_pago:""}])}}><Plus size={15}/> Añadir medio</button></div>{splits.map((p,i)=><div className="op-payment-row" key={i}><label>Valor<input inputMode="numeric" value={p.monto||""} onChange={(e)=>{setModalError(null);setSplits(splits.map((x,j)=>j===i?{...x,monto:num(e.target.value)}:x))}}/></label><label>Medio<select value={p.medio_pago} onChange={(e)=>{setModalError(null);setSplits(splits.map((x,j)=>j===i?{...x,medio_pago:e.target.value}:x))}}><option value="">Seleccione</option>{metodos.map((x)=><option key={x}>{x}</option>)}</select></label><button className="op-remove-payment" onClick={()=>{setModalError(null);setSplits(splits.filter((_,j)=>j!==i))}} title="Quitar"><Trash2 size={16}/></button></div>)}<div className="op-payment-totals"><span>Saldo pagado: <b>{money(totalSplit)}</b></span><span>Pendiente: <b>{money(pendienteEdit)}</b></span></div></div>
         <label className="full">Observación<textarea rows={3} value={editing.observacion} onChange={(e)=>setEditing({...editing,observacion:e.target.value})}/></label>
       </div>
-      <div className="op-modal-footer"><button className="op-btn secondary" onClick={()=>setEditing(null)}>Cancelar</button><button className="op-btn primary" disabled={saving} onClick={save}><SlidersHorizontal size={16}/>{saving?"Guardando…":"Guardar cambios"}</button></div>
+      <div className="op-modal-footer"><button className="op-btn secondary" disabled={saving} onClick={()=>{setEditing(null);setModalError(null)}}>Cancelar</button><button className="op-btn primary" disabled={saving} onClick={save}><SlidersHorizontal size={16}/>{saving?"Guardando…":"Guardar cambios"}</button></div>
     </div></div>}
   </div>;
 }
