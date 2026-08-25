@@ -38,24 +38,34 @@ export type CodigoOperativoPayload = {
 };
 
 export async function getCodigosOperativos(): Promise<CodigoOperativo[]> {
-  const { data, error } = await client()
-    .from("codigo_operativo")
-    .select("id_codigo_operativo,codigo_ch,descripcion,id_plan,incluye_almuerzo,restaurante,prioridad,activo,created_at,updated_at,plan(id_plan,nombre_plan,precio_plan,tipo_fecha,tipo_hora,plan_fechas(id_fecha,fecha),plan_horas(id_hora,hora))")
-    .order("codigo_ch", { ascending: true });
-  if (error) throw error;
-  return (data ?? []).map((r: any) => ({
-    ...r,
-    id_codigo_operativo: Number(r.id_codigo_operativo),
-    id_plan: r.id_plan == null ? null : Number(r.id_plan),
-    prioridad: Number(r.prioridad || 0),
-    plan: r.plan ? {
-      ...r.plan,
-      id_plan: Number(r.plan.id_plan),
-      precio_plan: r.plan.precio_plan == null ? null : Number(r.plan.precio_plan),
-      plan_fechas: (r.plan.plan_fechas ?? []).map((f: any) => ({ id_fecha: Number(f.id_fecha), fecha: String(f.fecha ?? "").slice(0,10) })),
-      plan_horas: (r.plan.plan_horas ?? []).map((h: any) => ({ id_hora: Number(h.id_hora), hora: String(h.hora ?? "") })),
-    } : null,
-  })) as CodigoOperativo[];
+  try {
+    const { data, error } = await client()
+      .from("codigo_operativo")
+      .select("id_codigo_operativo,codigo_ch,descripcion,id_plan,incluye_almuerzo,restaurante,prioridad,activo,created_at,updated_at,plan(id_plan,nombre_plan,precio_plan,tipo_fecha,tipo_hora,plan_fechas(id_fecha,fecha),plan_horas(id_hora,hora))")
+      .order("codigo_ch", { ascending: true });
+
+    if (error) {
+      console.warn("No se pudieron cargar los códigos operativos. Los planes seguirán visibles:", error);
+      return [];
+    }
+
+    return (data ?? []).map((r: any) => ({
+      ...r,
+      id_codigo_operativo: Number(r.id_codigo_operativo),
+      id_plan: r.id_plan == null ? null : Number(r.id_plan),
+      prioridad: Number(r.prioridad || 0),
+      plan: r.plan ? {
+        ...r.plan,
+        id_plan: Number(r.plan.id_plan),
+        precio_plan: r.plan.precio_plan == null ? null : Number(r.plan.precio_plan),
+        plan_fechas: (r.plan.plan_fechas ?? []).map((f: any) => ({ id_fecha: Number(f.id_fecha), fecha: String(f.fecha ?? "").slice(0,10) })),
+        plan_horas: (r.plan.plan_horas ?? []).map((h: any) => ({ id_hora: Number(h.id_hora), hora: String(h.hora ?? "") })),
+      } : null,
+    })) as CodigoOperativo[];
+  } catch (error) {
+    console.warn("Fallo inesperado cargando códigos operativos. Los planes seguirán visibles:", error);
+    return [];
+  }
 }
 
 export async function createCodigoOperativo(payload: CodigoOperativoPayload) {
@@ -140,3 +150,5 @@ export async function cambiarCodigoOperativoReserva(args: {
   if (error) throw error;
   return String(data ?? "");
 }
+
+function cRestaurant(c: CodigoOperativo) { return String(c.restaurante ?? "").trim().toLowerCase(); }
