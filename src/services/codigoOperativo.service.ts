@@ -150,5 +150,3 @@ export async function cambiarCodigoOperativoReserva(args: {
   if (error) throw error;
   return String(data ?? "");
 }
-
-function cRestaurant(c: CodigoOperativo) { return String(c.restaurante ?? "").trim().toLowerCase(); }
