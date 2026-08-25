@@ -37,9 +37,26 @@ export type CodigoOperativoPayload = {
   activo?: boolean;
 };
 
+function normalizeCodigo(r: any): CodigoOperativo {
+  return {
+    ...r,
+    id_codigo_operativo: Number(r.id_codigo_operativo),
+    id_plan: r.id_plan == null ? null : Number(r.id_plan),
+    prioridad: Number(r.prioridad || 0),
+    plan: r.plan ? {
+      ...r.plan,
+      id_plan: Number(r.plan.id_plan),
+      precio_plan: r.plan.precio_plan == null ? null : Number(r.plan.precio_plan),
+      plan_fechas: (r.plan.plan_fechas ?? []).map((f: any) => ({ id_fecha: Number(f.id_fecha), fecha: String(f.fecha ?? "").slice(0, 10) })),
+      plan_horas: (r.plan.plan_horas ?? []).map((h: any) => ({ id_hora: Number(h.id_hora), hora: String(h.hora ?? "") })),
+    } : null,
+  } as CodigoOperativo;
+}
+
 export async function getCodigosOperativos(): Promise<CodigoOperativo[]> {
   try {
-    const { data, error } = await client()
+    const db = client();
+    const { data, error } = await db
       .from("codigo_operativo")
       .select("id_codigo_operativo,codigo_ch,descripcion,id_plan,incluye_almuerzo,restaurante,prioridad,activo,created_at,updated_at,plan(id_plan,nombre_plan,precio_plan,tipo_fecha,tipo_hora,plan_fechas(id_fecha,fecha),plan_horas(id_hora,hora))")
       .order("codigo_ch", { ascending: true });
@@ -49,19 +66,38 @@ export async function getCodigosOperativos(): Promise<CodigoOperativo[]> {
       return [];
     }
 
-    return (data ?? []).map((r: any) => ({
-      ...r,
-      id_codigo_operativo: Number(r.id_codigo_operativo),
-      id_plan: r.id_plan == null ? null : Number(r.id_plan),
-      prioridad: Number(r.prioridad || 0),
-      plan: r.plan ? {
-        ...r.plan,
-        id_plan: Number(r.plan.id_plan),
-        precio_plan: r.plan.precio_plan == null ? null : Number(r.plan.precio_plan),
-        plan_fechas: (r.plan.plan_fechas ?? []).map((f: any) => ({ id_fecha: Number(f.id_fecha), fecha: String(f.fecha ?? "").slice(0,10) })),
-        plan_horas: (r.plan.plan_horas ?? []).map((h: any) => ({ id_hora: Number(h.id_hora), hora: String(h.hora ?? "") })),
-      } : null,
-    })) as CodigoOperativo[];
+    const base = (data ?? []).map(normalizeCodigo);
+
+    // Un mismo CH puede estar relacionado con varios planes mediante
+    // codigo_operativo_plan. Esto permite, por ejemplo, que CH030 sea el
+    // código común de todas las rutas del grupo Buggies sin duplicar CH030.
+    const { data: links, error: linksError } = await db
+      .from("codigo_operativo_plan")
+      .select("id_codigo_operativo,id_plan,activo")
+      .eq("activo", true);
+
+    if (linksError) {
+      // Compatibilidad con instalaciones donde la tabla puente aún no existe.
+      console.warn("No se pudieron cargar vínculos múltiples de códigos CH; se usarán los vínculos directos:", linksError);
+      return base;
+    }
+
+    const byCodeId = new Map(base.map((c) => [c.id_codigo_operativo, c]));
+    const result = [...base];
+    const seen = new Set(result.map((c) => `${c.id_codigo_operativo}:${c.id_plan ?? "null"}`));
+
+    for (const link of links ?? []) {
+      const original = byCodeId.get(Number(link.id_codigo_operativo));
+      if (!original) continue;
+      const idPlan = Number(link.id_plan);
+      if (!Number.isFinite(idPlan)) continue;
+      const key = `${original.id_codigo_operativo}:${idPlan}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push({ ...original, id_plan: idPlan, plan: null });
+    }
+
+    return result.sort((a, b) => a.codigo_ch.localeCompare(b.codigo_ch) || Number(a.id_plan ?? 0) - Number(b.id_plan ?? 0));
   } catch (error) {
     console.warn("Fallo inesperado cargando códigos operativos. Los planes seguirán visibles:", error);
     return [];
