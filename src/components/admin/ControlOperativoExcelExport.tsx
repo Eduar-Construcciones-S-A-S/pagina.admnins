@@ -195,29 +195,69 @@ export default function ControlOperativoExcelExport() {
   }, [rows, selectedDate]);
 
   useEffect(() => {
-    const renameButton = () => {
+    const ensureExportButtons = () => {
       if (!window.location.pathname.includes("/app/control-operativo")) return;
-      const buttons = Array.from(document.querySelectorAll("button"));
-      const button = buttons.find((item) => /^\s*exportar\s*$/i.test(item.textContent ?? "") || /exportar pólizas/i.test(item.textContent ?? ""));
-      if (!button || /exportar pólizas/i.test(button.textContent ?? "")) return;
-      const textNode = Array.from(button.childNodes).find((node) => node.nodeType === Node.TEXT_NODE);
-      if (textNode) textNode.nodeValue = " Exportar pólizas";
-      else button.append(" Exportar pólizas");
+
+      const existingExcel = document.querySelector<HTMLButtonElement>('button[data-control-export="excel"]');
+      const existingPolicies = document.querySelector<HTMLButtonElement>('button[data-control-export="policies"]');
+      if (existingExcel && existingPolicies) return;
+
+      const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>("button"));
+      const base = buttons.find((button) => {
+        const label = (button.textContent ?? "").trim();
+        return /^exportar$/i.test(label) || /^exportar excel$/i.test(label) || /^exportar pólizas$/i.test(label);
+      });
+      if (!base) return;
+
+      base.dataset.controlExport = "excel";
+      const baseText = Array.from(base.childNodes).find((node) => node.nodeType === Node.TEXT_NODE);
+      if (baseText) baseText.nodeValue = " Exportar Excel";
+      else base.append(" Exportar Excel");
+      base.title = "Exportar todas las reservas a Excel";
+
+      if (!existingPolicies) {
+        const policyButton = base.cloneNode(true) as HTMLButtonElement;
+        policyButton.dataset.controlExport = "policies";
+        policyButton.removeAttribute("id");
+        const policyText = Array.from(policyButton.childNodes).find((node) => node.nodeType === Node.TEXT_NODE);
+        if (policyText) policyText.nodeValue = " Exportar pólizas";
+        else policyButton.append(" Exportar pólizas");
+        policyButton.title = "Exportar nombres y cédulas por fecha";
+        policyButton.style.marginLeft = "8px";
+        base.insertAdjacentElement("afterend", policyButton);
+      }
     };
 
-    renameButton();
-    const observer = new MutationObserver(renameButton);
+    ensureExportButtons();
+    const observer = new MutationObserver(ensureExportButtons);
     observer.observe(document.body, { childList: true, subtree: true });
 
     const onClick = async (event: MouseEvent) => {
       if (!window.location.pathname.includes("/app/control-operativo")) return;
       const target = event.target as HTMLElement | null;
       const button = target?.closest("button") as HTMLButtonElement | null;
-      if (!button || !/exportar(?: pólizas)?/i.test(button.textContent ?? "")) return;
+      const mode = button?.dataset.controlExport;
+      if (!button || (mode !== "excel" && mode !== "policies")) return;
 
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
+
+      if (mode === "excel") {
+        const original = button.innerHTML;
+        button.disabled = true;
+        button.textContent = "Generando Excel…";
+        try {
+          await exportarControlOperativoExcel();
+        } catch (e) {
+          console.error("No fue posible exportar el control operativo a Excel:", e);
+          window.alert("No fue posible generar el archivo Excel. Intenta nuevamente.");
+        } finally {
+          button.disabled = false;
+          button.innerHTML = original;
+        }
+        return;
+      }
 
       const pageDate = (document.querySelector('.op-filters input[type="date"]') as HTMLInputElement | null)?.value;
       setSelectedDate(pageDate || hoy());
@@ -237,6 +277,7 @@ export default function ControlOperativoExcelExport() {
     return () => {
       observer.disconnect();
       document.removeEventListener("click", onClick, true);
+      document.querySelector('button[data-control-export="policies"]')?.remove();
     };
   }, []);
 
@@ -250,19 +291,6 @@ export default function ControlOperativoExcelExport() {
       setOpen(false);
     } catch (e: any) {
       setError(e?.message || "No fue posible generar el archivo de pólizas.");
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  const exportAll = async () => {
-    setError("");
-    setExporting(true);
-    try {
-      await exportarControlOperativoExcel();
-      setOpen(false);
-    } catch (e: any) {
-      setError(e?.message || "No fue posible generar el archivo Excel.");
     } finally {
       setExporting(false);
     }
@@ -296,12 +324,9 @@ export default function ControlOperativoExcelExport() {
           {error && <div style={{ marginTop:14, padding:"12px 14px", borderRadius:10, background:"#fff1f0", border:"1px solid #f0c7c3", color:"#a33a31", fontSize:13 }}>{error}</div>}
         </div>
 
-        <div style={{ padding:"16px 26px 22px", borderTop:"1px solid #eee2d2", display:"flex", flexWrap:"wrap", justifyContent:"space-between", gap:10 }}>
-          <button type="button" onClick={exportAll} disabled={loading || exporting} style={{ height:44, padding:"0 16px", borderRadius:11, border:"1px solid #d8c19e", background:"#fff", color:"#725227", fontWeight:700, cursor:"pointer" }}>Exportar todas las reservas</button>
-          <div style={{ display:"flex", gap:10, marginLeft:"auto" }}>
-            <button type="button" onClick={() => setOpen(false)} disabled={exporting} style={{ height:44, padding:"0 16px", borderRadius:11, border:"1px solid #ddd0bd", background:"#fff", color:"#5d5145", fontWeight:700, cursor:"pointer" }}>Cancelar</button>
-            <button type="button" onClick={exportPolicies} disabled={loading || exporting || !selectedDate || asistentesCount === 0} style={{ height:44, padding:"0 18px", borderRadius:11, border:0, background:"#c58b31", color:"#fff", fontWeight:800, cursor:"pointer", opacity:(loading || exporting || !selectedDate || asistentesCount === 0) ? .55 : 1 }}>{exporting ? "Generando…" : "Exportar pólizas"}</button>
-          </div>
+        <div style={{ padding:"16px 26px 22px", borderTop:"1px solid #eee2d2", display:"flex", justifyContent:"flex-end", gap:10 }}>
+          <button type="button" onClick={() => setOpen(false)} disabled={exporting} style={{ height:44, padding:"0 16px", borderRadius:11, border:"1px solid #ddd0bd", background:"#fff", color:"#5d5145", fontWeight:700, cursor:"pointer" }}>Cancelar</button>
+          <button type="button" onClick={exportPolicies} disabled={loading || exporting || !selectedDate || asistentesCount === 0} style={{ height:44, padding:"0 18px", borderRadius:11, border:0, background:"#c58b31", color:"#fff", fontWeight:800, cursor:"pointer", opacity:(loading || exporting || !selectedDate || asistentesCount === 0) ? .55 : 1 }}>{exporting ? "Generando…" : "Exportar pólizas"}</button>
         </div>
       </div>
     </div>
