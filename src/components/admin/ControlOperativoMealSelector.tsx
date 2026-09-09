@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { getMenusActivosPorRestaurante } from "../../services/restauranteMenu.service";
+import { getMenusActivosPorRestaurante, type RestauranteMenuItem } from "../../services/restauranteMenu.service";
 import "../../styles/control-operativo-meals.css";
 
 const normalize = (value: unknown) => String(value ?? "").trim().toLowerCase();
@@ -21,39 +21,56 @@ function setReactInputValue(input: HTMLInputElement, value: string) {
 export default function ControlOperativoMealSelector() {
   useEffect(() => {
     let disposed = false;
-    let restaurantCleanup: (() => void) | null = null;
-    let requestToken = 0;
+    let lastRestaurant = "";
+    let lastLunchEnabled: boolean | null = null;
+    const menuCache = new Map<string, RestauranteMenuItem[]>();
 
-    const enhance = async () => {
+    const renderSelector = async () => {
       if (disposed) return;
 
       const mealLabel = findFieldLabel("Tipo almuerzo");
       const restaurantLabel = findFieldLabel("Restaurante");
+      const includesLunchLabel = findFieldLabel("Incluye almuerzo");
       const input = mealLabel?.querySelector<HTMLInputElement>("input");
       const restaurantSelect = restaurantLabel?.querySelector<HTMLSelectElement>("select");
+      const includesLunchSelect = includesLunchLabel?.querySelector<HTMLSelectElement>("select");
 
-      if (!mealLabel || !input || !restaurantSelect) return;
+      if (!mealLabel || !input || !restaurantSelect) {
+        lastRestaurant = "";
+        lastLunchEnabled = null;
+        return;
+      }
 
       const existing = mealLabel.querySelector<HTMLSelectElement>("select[data-restaurant-meal-selector='true']");
       const restaurant = restaurantSelect.value.trim();
-      const includesLunchLabel = findFieldLabel("Incluye almuerzo");
-      const includesLunchSelect = includesLunchLabel?.querySelector<HTMLSelectElement>("select");
-      const lunchEnabled = !includesLunchSelect || normalize(includesLunchSelect.value) === "si" || normalize(includesLunchSelect.value) === "sí";
+      const lunchEnabled = !includesLunchSelect || ["si", "sí"].includes(normalize(includesLunchSelect.value));
+
+      if (restaurant === lastRestaurant && lunchEnabled === lastLunchEnabled && existing) {
+        if (existing.value !== input.value && input.value) existing.value = input.value;
+        return;
+      }
+
+      lastRestaurant = restaurant;
+      lastLunchEnabled = lunchEnabled;
 
       if (!restaurant || !lunchEnabled) {
-        if (existing) existing.remove();
+        existing?.remove();
         input.hidden = false;
         input.disabled = !lunchEnabled;
         input.placeholder = lunchEnabled ? "Selecciona primero un restaurante" : "No aplica";
         return;
       }
 
-      const token = ++requestToken;
-      const menus = await getMenusActivosPorRestaurante(restaurant);
-      if (disposed || token !== requestToken) return;
+      const cacheKey = normalize(restaurant);
+      let menus = menuCache.get(cacheKey);
+      if (!menus) {
+        menus = await getMenusActivosPorRestaurante(restaurant);
+        menuCache.set(cacheKey, menus);
+      }
+      if (disposed) return;
 
       if (!menus.length) {
-        if (existing) existing.remove();
+        existing?.remove();
         input.hidden = false;
         input.disabled = false;
         input.placeholder = `Sin menú configurado para ${restaurant}`;
@@ -79,55 +96,23 @@ export default function ControlOperativoMealSelector() {
       });
 
       const currentValue = input.value.trim();
-      if (currentValue && menus.some((menu) => normalize(menu.nombre_plato) === normalize(currentValue))) {
-        const exact = menus.find((menu) => normalize(menu.nombre_plato) === normalize(currentValue));
-        select.value = exact?.nombre_plato ?? "";
-      } else {
-        select.value = "";
-      }
-
+      const matching = menus.find((menu) => normalize(menu.nombre_plato) === normalize(currentValue));
+      select.value = matching?.nombre_plato ?? "";
       select.onchange = () => setReactInputValue(input, select.value);
 
       if (!existing) mealLabel.appendChild(select);
       input.hidden = true;
       input.disabled = false;
-
-      if (!restaurantSelect.dataset.mealListenerAttached) {
-        const onRestaurantChange = () => {
-          setReactInputValue(input, "");
-          void enhance();
-        };
-        restaurantSelect.addEventListener("change", onRestaurantChange);
-        restaurantSelect.dataset.mealListenerAttached = "true";
-        restaurantCleanup = () => {
-          restaurantSelect.removeEventListener("change", onRestaurantChange);
-          delete restaurantSelect.dataset.mealListenerAttached;
-        };
-      }
-
-      if (includesLunchSelect && !includesLunchSelect.dataset.mealListenerAttached) {
-        const onLunchChange = () => {
-          if (normalize(includesLunchSelect.value) !== "si" && normalize(includesLunchSelect.value) !== "sí") {
-            setReactInputValue(input, "");
-          }
-          void enhance();
-        };
-        includesLunchSelect.addEventListener("change", onLunchChange);
-        includesLunchSelect.dataset.mealListenerAttached = "true";
-      }
     };
 
-    const observer = new MutationObserver(() => {
-      void enhance();
-    });
-
-    observer.observe(document.body, { childList: true, subtree: true });
-    void enhance();
+    const timer = window.setInterval(() => {
+      void renderSelector();
+    }, 350);
+    void renderSelector();
 
     return () => {
       disposed = true;
-      observer.disconnect();
-      restaurantCleanup?.();
+      window.clearInterval(timer);
     };
   }, []);
 
