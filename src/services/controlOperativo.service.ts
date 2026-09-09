@@ -52,14 +52,29 @@ export async function getControlOperativo():Promise<ControlOperativoRow[]>{
   ]);
   const errors=[reservasRes.error,participantesRes.error,planesRes.error,fechasRes.error,horasRes.error].filter(Boolean);if(errors.length)throw errors[0];
   const reservas=reservasRes.data??[],participantes=participantesRes.data??[],planes=planesRes.data??[],fechas=fechasRes.data??[],horas=horasRes.data??[];
-  const planMap=new Map(planes.map((p:any)=>[Number(p.id_plan),p]));const fechaMap=new Map<number,any>();const horaMap=new Map<number,any>();
+  const planMap=new Map(planes.map((p:any)=>[Number(p.id_plan),p]));const fechaMap=new Map<number,any>();const horaMap=new Map<number,any>();const horasPorPlan=new Map<number,any[]>();
   for(const f of fechas as any[]){for(const id of [f.id_fecha,f.id_plan_fecha,f.id])if(id!=null)fechaMap.set(Number(id),f);}
-  for(const h of horas as any[]){for(const id of [h.id_hora,h.id_plan_hora,h.id])if(id!=null)horaMap.set(Number(id),h);}
+  for(const h of horas as any[]){
+    for(const id of [h.id_hora,h.id_plan_hora,h.id])if(id!=null)horaMap.set(Number(id),h);
+    const planId=Number(h.id_plan);
+    if(Number.isFinite(planId)){
+      if(!horasPorPlan.has(planId))horasPorPlan.set(planId,[]);
+      horasPorPlan.get(planId)!.push(h);
+    }
+  }
   const participantesPorReserva=new Map<number,any[]>();for(const p of participantes as any[]){const id=Number(p.id_reserva);if(!participantesPorReserva.has(id))participantesPorReserva.set(id,[]);participantesPorReserva.get(id)!.push(p);}
   const rows:ControlOperativoRow[]=[];
   for(const r of reservas as any[]){
-    const plan=planMap.get(Number(r.id_plan));const fechaId=r.id_fecha??r.id_plan_fecha??r.id_fecha_reserva;const horaId=r.id_hora??r.id_plan_hora??r.id_hora_reserva;
-    const fechaRelacionada=fechaMap.get(Number(fechaId));const horaRelacionada=horaMap.get(Number(horaId));const personas=participantesPorReserva.get(Number(r.id_reserva))??[null];
+    const planId=r.id_plan==null?null:Number(r.id_plan);const plan=planId==null?null:planMap.get(planId);const fechaId=r.id_fecha??r.id_plan_fecha??r.id_fecha_reserva;const horaIdOriginal=r.id_hora??r.id_plan_hora??r.id_hora_reserva;
+    const fechaRelacionada=fechaMap.get(Number(fechaId));let horaRelacionada=horaMap.get(Number(horaIdOriginal));let horaId=horaIdOriginal;
+    if(!horaRelacionada&&planId!=null){
+      const opciones=horasPorPlan.get(planId)??[];
+      const horaDirecta=hourOnly(r.hora_reserva??r.hora);
+      if(horaDirecta)horaRelacionada=opciones.find((h:any)=>hourOnly(h.hora_reserva??h.hora)===horaDirecta);
+      if(!horaRelacionada&&opciones.length===1)horaRelacionada=opciones[0];
+      if(horaRelacionada)horaId=horaRelacionada.id_hora??horaRelacionada.id_plan_hora??horaRelacionada.id??horaIdOriginal;
+    }
+    const personas=participantesPorReserva.get(Number(r.id_reserva))??[null];
     const fechaReserva=dateOnly(r.fecha_reserva??r.fecha??fechaRelacionada?.fecha_reserva??fechaRelacionada?.fecha);const horaReserva=hourOnly(r.hora_reserva??r.hora??horaRelacionada?.hora_reserva??horaRelacionada?.hora);
     const cantidadPersonas=r.cantidad_personas==null?personas.filter(Boolean).length:num(r.cantidad_personas);const precioPlan=num(plan?.precio_plan);
     const totalGuardado=num(r.valor_total)>0?num(r.valor_total):num(r.precio_unitario)*cantidadPersonas;const totalCalculado=precioPlan>0?precioPlan*cantidadPersonas:0;const total=totalGuardado>0?totalGuardado:totalCalculado;
@@ -67,7 +82,7 @@ export async function getControlOperativo():Promise<ControlOperativoRow[]>{
     for(const p of personas){const contactoCliente=text(p?.telefono_cliente||r.telefono_cliente);rows.push({
       id_reserva:Number(r.id_reserva),id_participante:p?Number(p.id_participante):null,reserva_codigo:text(r.codigo_reserva)||`#${r.id_reserva}`,
       id_codigo_operativo:r.id_codigo_operativo==null?null:Number(r.id_codigo_operativo),incluye_almuerzo:!!r.incluye_almuerzo,
-      id_plan:r.id_plan==null?null:Number(r.id_plan),id_fecha:fechaId==null?null:Number(fechaId),id_hora:horaId==null?null:Number(horaId),plan:text(plan?.nombre_plan),fecha:fechaReserva,hora:horaReserva,aprobado:r.aprobado??null,
+      id_plan:planId,id_fecha:fechaId==null?null:Number(fechaId),id_hora:horaId==null?null:Number(horaId),plan:text(plan?.nombre_plan),fecha:fechaReserva,hora:horaReserva,aprobado:r.aprobado??null,
       nombre:text(p?.nombre),edad:p?.edad==null?null:Number(p.edad),nacionalidad:text(p?.nacionalidad),tipo_documento:text(p?.tipo_documento),documento:text(p?.numero_documento),contacto:text(p?.telefono_participante||contactoCliente),contacto_cliente:contactoCliente,cantidad:cantidadPersonas,
       mina:r.mina??null,refrigerio:r.refrigerio??null,restaurante:text(r.restaurante),almuerzo:text(p?.tipo_almuerzo),total,abono,medio_abono:text(r.metodo_pago_abono),referencia_pago_abono:text(r.referencia_pago_abono),pago_saldo:pagoSaldo,medio_saldo:text(r.metodo_pago_saldo),saldo_pendiente:saldo,observacion:text(r.observacion),
       estado_operativo:(text(r.estado_operativo)||"programada") as EstadoOperativo,motivo_estado_operativo:text(r.motivo_estado_operativo),estado_operativo_at:text(r.estado_operativo_at)
