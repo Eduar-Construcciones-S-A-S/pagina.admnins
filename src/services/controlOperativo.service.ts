@@ -32,8 +32,39 @@ export type ReservaOperacionHistorial = {
 };
 
 export type ControlOperativoRow = {
-  id_reserva:number; id_participante:number|null; reserva_codigo:string; id_codigo_operativo:number|null; incluye_almuerzo:boolean;
-  id_plan:number|null; plan:string; estado_operativo:EstadoOperativo; motivo_estado_operativo:string; fecha:string; id_hora:number|null; hora:string; nombre:string; edad:number|string; nacionalidad:string; documento:string; contacto:string; cantidad:number; mina:boolean; refrigerio:boolean; restaurante:string; almuerzo:string; total:number; abono:number; medio_abono:string; referencia_pago_abono:string; pago_saldo:number; medio_saldo:string; saldo_pendiente:number; observacion:string;
+  id_reserva:number;
+  id_participante:number|null;
+  reserva_codigo:string;
+  id_codigo_operativo:number|null;
+  incluye_almuerzo:boolean;
+  id_plan:number|null;
+  id_fecha:number|null;
+  plan:string;
+  estado_operativo:EstadoOperativo;
+  motivo_estado_operativo:string;
+  fecha:string;
+  id_hora:number|null;
+  hora:string;
+  nombre:string;
+  edad:number|string;
+  nacionalidad:string;
+  tipo_documento:string;
+  documento:string;
+  contacto:string;
+  contacto_cliente:string;
+  cantidad:number;
+  mina:boolean;
+  refrigerio:boolean;
+  restaurante:string;
+  almuerzo:string;
+  total:number;
+  abono:number;
+  medio_abono:string;
+  referencia_pago_abono:string;
+  pago_saldo:number;
+  medio_saldo:string;
+  saldo_pendiente:number;
+  observacion:string;
 };
 
 function text(v:unknown){return String(v??"");}
@@ -54,6 +85,7 @@ export async function getControlOperativo():Promise<ControlOperativoRow[]>{
     id_codigo_operativo:r.id_codigo_operativo==null?null:num(r.id_codigo_operativo),
     incluye_almuerzo:bool(r.incluye_almuerzo),
     id_plan:r.id_plan==null?null:num(r.id_plan),
+    id_fecha:r.id_fecha==null?null:num(r.id_fecha),
     plan:text(r.plan??r.nombre_plan),
     estado_operativo:(text(r.estado_operativo)||"programada") as EstadoOperativo,
     motivo_estado_operativo:text(r.motivo_estado_operativo),
@@ -63,8 +95,10 @@ export async function getControlOperativo():Promise<ControlOperativoRow[]>{
     nombre:text(r.nombre),
     edad:r.edad??"",
     nacionalidad:text(r.nacionalidad),
+    tipo_documento:text(r.tipo_documento),
     documento:text(r.numero_documento??r.documento),
     contacto:text(r.telefono_participante??r.contacto),
+    contacto_cliente:text(r.telefono_cliente??r.contacto_cliente),
     cantidad:num(r.cantidad_personas??r.cantidad),
     mina:bool(r.mina),
     refrigerio:bool(r.refrigerio),
@@ -86,11 +120,34 @@ export async function getDevolucionesControlOperativo():Promise<ReservaDevolucio
 export async function getReservaPagos(idReserva:number):Promise<ReservaPago[]>{const{data,error}=await client().from("reserva_pago").select("*").eq("id_reserva",idReserva).order("fecha_pago",{ascending:true});if(error)throw error;return(data??[]).map((r:any)=>({...r,id_reserva:num(r.id_reserva),monto:num(r.monto),medio_pago:text(r.medio_pago)}));}
 export async function getReservaOperacionHistorial(idReserva:number):Promise<ReservaOperacionHistorial[]>{const{data,error}=await client().from("reserva_operacion_historial").select("*").eq("id_reserva",idReserva).order("created_at",{ascending:false});if(error)throw error;return(data??[]) as ReservaOperacionHistorial[];}
 
-export async function cambiarEstadoOperativo(args:{id_reserva:number;estado:EstadoOperativo;motivo?:string|null}){
-  const{data,error}=await client().rpc("cambiar_estado_operativo_reserva",{p_id_reserva:args.id_reserva,p_estado:args.estado,p_motivo:args.motivo?.trim()||null});if(error)throw error;return data;
+export async function cambiarEstadoOperativo(args:{id_reserva:number;estado:EstadoOperativo;motivo?:string|null}):Promise<any>;
+export async function cambiarEstadoOperativo(idReserva:number,estado:EstadoOperativo,motivo?:string|null):Promise<any>;
+export async function cambiarEstadoOperativo(
+  argsOrId:{id_reserva:number;estado:EstadoOperativo;motivo?:string|null}|number,
+  estadoArg?:EstadoOperativo,
+  motivoArg?:string|null,
+){
+  const args=typeof argsOrId==="number"
+    ? {id_reserva:argsOrId,estado:estadoArg as EstadoOperativo,motivo:motivoArg}
+    : argsOrId;
+  const{data,error}=await client().rpc("cambiar_estado_operativo_reserva",{
+    p_id_reserva:args.id_reserva,
+    p_estado:args.estado,
+    p_motivo:args.motivo?.trim()||null,
+  });
+  if(error)throw error;
+  return data;
 }
-export async function reprogramarReservaOperativa(args:{id_reserva:number;fecha:string;id_hora:number|null;motivo?:string|null}){
-  const{data,error}=await client().rpc("reprogramar_reserva_operativa",{p_id_reserva:args.id_reserva,p_fecha:args.fecha,p_id_hora:args.id_hora,p_motivo:args.motivo?.trim()||null});if(error)throw error;return data;
+
+export async function reprogramarReservaOperativa(args:{id_reserva:number;id_plan?:number|null;fecha:string;id_hora:number|null;motivo?:string|null}){
+  const{data,error}=await client().rpc("reprogramar_reserva_operativa",{
+    p_id_reserva:args.id_reserva,
+    p_fecha:args.fecha,
+    p_id_hora:args.id_hora,
+    p_motivo:args.motivo?.trim()||null,
+  });
+  if(error)throw error;
+  return data==null?null:Number(data);
 }
 export async function asegurarFechaPlan(idPlan:number,fecha:string){const{data,error}=await client().from("plan_fechas").select("id_fecha").eq("id_plan",idPlan).eq("fecha",fecha).maybeSingle();if(error)throw error;if(data?.id_fecha)return num(data.id_fecha);const{data:created,error:createError}=await client().from("plan_fechas").insert({id_plan:idPlan,fecha}).select("id_fecha").single();if(createError)throw createError;return num(created.id_fecha);}
 export async function registrarDevolucionReserva(args:{id_reserva:number;monto:number;medio_pago:string;tipo_devolucion:"parcial"|"total";motivo?:string|null;observacion?:string|null}){
