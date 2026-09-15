@@ -253,10 +253,20 @@ export async function getReservas() {
   }));
 }
 
+export async function getOrCreatePlanFecha(idPlan:number,fecha:string){
+  const value=String(fecha??"").slice(0,10);
+  if(!idPlan||!/^\d{4}-\d{2}-\d{2}$/.test(value))throw new Error("Selecciona una fecha de visita válida.");
+  const{data,error}=await getClient().rpc("get_or_create_plan_fecha",{p_plan_id:idPlan,p_fecha:value});
+  if(error)throw error;
+  const id=Number(data);
+  if(!Number.isFinite(id)||id<=0)throw new Error("No fue posible preparar la fecha de visita seleccionada.");
+  return id;
+}
+
 export async function createReserva(payload:any){const{data,error}=await getClient().from("reserva").insert(payload).select().single();if(error)throw error;return data}
 export async function updateReserva(id:number,payload:any){
   const db=getClient();
-  const shouldRecalculate=Object.prototype.hasOwnProperty.call(payload,"id_plan")||Object.prototype.hasOwnProperty.call(payload,"cantidad_personas");
+  const shouldRecalculate=Object.prototype.hasOwnProperty.call(payload,"id_plan")||Object.prototype.hasOwnProperty.call(payload,"id_fecha")||Object.prototype.hasOwnProperty.call(payload,"cantidad_personas");
   const finalPayload={...payload};
 
   if(shouldRecalculate){
@@ -265,10 +275,11 @@ export async function updateReserva(id:number,payload:any){
 
     const idPlan=Number(payload.id_plan??current.id_plan);
     const cantidad=Math.max(1,Number(payload.cantidad_personas??current.cantidad_personas??1));
+    const idFecha=payload.id_fecha??current.id_fecha;
     let fecha=new Date().toLocaleDateString("en-CA",{timeZone:"America/Bogota"});
 
-    if(current.id_fecha!=null){
-      const{data:fechaData,error:fechaError}=await db.from("plan_fechas").select("fecha").eq("id_fecha",current.id_fecha).maybeSingle();
+    if(idFecha!=null){
+      const{data:fechaData,error:fechaError}=await db.from("plan_fechas").select("fecha").eq("id_fecha",idFecha).maybeSingle();
       if(fechaError)throw fechaError;
       if(fechaData?.fecha)fecha=String(fechaData.fecha).slice(0,10);
     }
