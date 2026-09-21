@@ -318,7 +318,7 @@ export default function ReservasApprovalGuard() {
         referencia_pago_abono: referencia,
       };
 
-      if (ajusteMonetario || Math.abs(impactoAdicionales) > 0.01) {
+      if (ajusteMonetario || Math.abs(impactoAdicionales - impactoOriginal) > 0.01) {
         patch.valor_total = totalNuevo;
         patch.precio_unitario = unitarioNuevo;
         if (ajusteMonetario) patch.observacion = observacion.trim();
