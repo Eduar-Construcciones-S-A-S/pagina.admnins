@@ -198,7 +198,7 @@ export default function ReservasApprovalGuard() {
       totalBaseNuevo = parseMoney(valorUnitario) * cantidad;
     }
 
-    const movimientosAdicionales: ReservaAdicionalInput[] = adicionalesDelPlan.flatMap((item) => {
+    const movimientosAdicionales: ReservaAdicionalInput[] = adicionalesDelPlan.flatMap<ReservaAdicionalInput>((item) => {
       const seleccionado = !!adicionalSeleccionado[item.id_adicional];
       const precio = precioEfectivoPlanAdicional(item);
       const cantidadAplicada = item.adicional.tipo_cobro === "por_persona" ? cantidad : 1;
