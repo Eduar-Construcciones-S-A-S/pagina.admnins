@@ -47,7 +47,7 @@ export default function PlanesAdmin(){
   const[adicionales,setAdicionales]=useState<Adicional[]>([]),[planAdicionales,setPlanAdicionales]=useState<PlanAdicional[]>([]),[adicionalForm,setAdicionalForm]=useState<Record<number,PlanAdicionalDraft>>({});
   const fileInputRef=useRef<HTMLInputElement>(null);
 
-  const fetchData=async()=>{try{setLoading(true);const[p,c,t,a,pa]=await Promise.all([getPlanes(),getCodigosOperativos(),getPlanTarifas(),getAdicionales(false),getPlanAdicionales()]);setPlanes(p as Plan[]);setCodigos(c);setTarifas(t);setAdicionales(a);setPlanAdicionales(pa)}catch(e){console.error(e)}finally{setLoading(false)}};
+  const fetchData=async()=>{try{setLoading(true);const[p,c,t,a,pa]=await Promise.all([getPlanes(),getCodigosOperativos(),getPlanTarifas(),getAdicionales(false).catch(()=>[]),getPlanAdicionales().catch(()=>[])]);setPlanes(p as Plan[]);setCodigos(c);setTarifas(t);setAdicionales(a);setPlanAdicionales(pa)}catch(e){console.error(e)}finally{setLoading(false)}};
   useEffect(()=>{fetchData()},[]);
   useEffect(()=>{if(!supabase)return;const ch=supabase.channel("planes-admin").on("postgres_changes",{event:"*",schema:"public",table:"plan"},fetchData).on("postgres_changes",{event:"*",schema:"public",table:"plan_tarifa"},fetchData).on("postgres_changes",{event:"*",schema:"public",table:"codigo_operativo"},fetchData).on("postgres_changes",{event:"*",schema:"public",table:"adicional"},fetchData).on("postgres_changes",{event:"*",schema:"public",table:"plan_adicional"},fetchData).subscribe();return()=>{supabase?.removeChannel(ch)}},[]);
 
