@@ -16,7 +16,7 @@ create table if not exists public.adicional (
 );
 
 create table if not exists public.plan_adicional (
-  id_plan bigint not null references public.plan(id_plan) on delete cascade,
+  id_plan integer not null references public.plan(id_plan) on delete cascade,
   id_adicional bigint not null references public.adicional(id_adicional) on delete restrict,
   modalidad text not null
     check (modalidad in ('opcional', 'incluido')),
