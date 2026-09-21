@@ -145,7 +145,7 @@ export default function ReservasApprovalGuard() {
     const unitario = Number(reserva.precio_unitario || (total > 0 ? total / cantidad : 0));
 
     const adicionalesPlan = planAdicionales.filter((item) => Number(item.id_plan) === Number(reserva.id_plan) && item.activo && item.adicional.activo);
-    const defaults = Object.fromEntries(adicionalesPlan.map((item) => [item.id_adicional, item.modalidad === "incluido"]));
+    const defaults = Object.fromEntries(adicionalesPlan.map((item) => [item.id_adicional, item.modalidad === "incluido"])) as Record<number, boolean>;
     const lunch = adicionalesPlan.find((item) => item.adicional.codigo === "almuerzo");
 
     setSelected(reserva);
