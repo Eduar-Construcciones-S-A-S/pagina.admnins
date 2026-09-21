@@ -61,7 +61,7 @@ export default function PlanesAdmin(){
   const buggyTotal=(p:Plan,cantidad:1|2)=>{const unit=tarifaBy(p.id_plan,"todos",cantidad,cantidad);return unit==null?null:unit*cantidad};
   const adicionalesActivos=()=>adicionales.filter(a=>a.activo);
   const adicionalConfigFor=(idPlan:number,idAdicional:number)=>planAdicionales.find(x=>Number(x.id_plan)===Number(idPlan)&&Number(x.id_adicional)===Number(idAdicional));
-  const buildAdicionalForm=(idPlan?:number)=>Object.fromEntries(adicionalesActivos().map(a=>{const current=idPlan?adicionalConfigFor(idPlan,a.id_adicional):undefined;return[a.id_adicional,{modalidad:current?.modalidad??"no_disponible",precio_override:current?.precio_override??null,permitir_quitar:!!current?.permitir_quitar}]}));
+  const buildAdicionalForm=(idPlan?:number):Record<number,PlanAdicionalDraft>=>Object.fromEntries(adicionalesActivos().map(a=>{const current=idPlan?adicionalConfigFor(idPlan,a.id_adicional):undefined;const modalidad:PlanAdicionalDraft["modalidad"]=current?.modalidad??"no_disponible";return[a.id_adicional,{modalidad,precio_override:current?.precio_override??null,permitir_quitar:!!current?.permitir_quitar}]})) as Record<number,PlanAdicionalDraft>;
   const precioAdicionalDraft=(a:Adicional,d?:PlanAdicionalDraft)=>Number(d?.precio_override??a.precio??0);
 
 
