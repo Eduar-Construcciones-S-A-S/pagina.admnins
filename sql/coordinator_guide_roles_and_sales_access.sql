@@ -434,6 +434,9 @@ ON public.snack_producto;
 DROP POLICY IF EXISTS snack_producto_select
 ON public.snack_producto;
 
+DROP POLICY IF EXISTS snack_producto_select_roles
+ON public.snack_producto;
+
 CREATE POLICY snack_producto_select_roles
 ON public.snack_producto
 FOR SELECT
@@ -461,6 +464,9 @@ ON public.snack_producto;
 DROP POLICY IF EXISTS snack_producto_insert
 ON public.snack_producto;
 
+DROP POLICY IF EXISTS snack_producto_insert_gestion
+ON public.snack_producto;
+
 CREATE POLICY snack_producto_insert_gestion
 ON public.snack_producto
 FOR INSERT
@@ -474,6 +480,9 @@ DROP POLICY IF EXISTS snack_producto_update_auth
 ON public.snack_producto;
 
 DROP POLICY IF EXISTS snack_producto_update
+ON public.snack_producto;
+
+DROP POLICY IF EXISTS snack_producto_update_gestion
 ON public.snack_producto;
 
 CREATE POLICY snack_producto_update_gestion
@@ -527,6 +536,9 @@ ON public.snack_venta;
 DROP POLICY IF EXISTS snack_venta_select
 ON public.snack_venta;
 
+DROP POLICY IF EXISTS snack_venta_select_roles
+ON public.snack_venta;
+
 CREATE POLICY snack_venta_select_roles
 ON public.snack_venta
 FOR SELECT
@@ -552,6 +564,9 @@ DROP POLICY IF EXISTS snack_detalle_select_auth
 ON public.snack_venta_detalle;
 
 DROP POLICY IF EXISTS snack_venta_detalle_select
+ON public.snack_venta_detalle;
+
+DROP POLICY IF EXISTS snack_detalle_select_roles
 ON public.snack_venta_detalle;
 
 CREATE POLICY snack_detalle_select_roles
