@@ -46,9 +46,9 @@ export function canAccess(role: AppRole, path: string) {
     return ["/app/reservas", "/app/control-operativo", "/app/ventas-snacks", "/app/ventas-snacks-enclave"].includes(path);
   }
   if (role === "coordinador") {
-    return ["/app/control-operativo", "/app/inventario-snacks", "/app/accesos-guias"].includes(path);
+    return ["/app/control-operativo", "/app/inventario-snacks", "/app/accesos-guias", "/app/entrega-efectivo"].includes(path);
   }
-  return path === "/app/ventas-snacks" || path === "/app/ventas-snacks-enclave";
+  return path === "/app/ventas-snacks" || path === "/app/ventas-snacks-enclave" || path === "/app/entrega-efectivo";
 }
 
 export function appRoleLabel(role: AppRole) {
