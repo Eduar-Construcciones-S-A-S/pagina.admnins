@@ -27,6 +27,7 @@ const EMPTY: SnackAdminDashboard = {
   productos_sin_costo: 0,
   top_productos: [],
   metodos_pago: [],
+  ubicaciones: [],
 };
 
 const money = (value: number) => `$${Math.round(Number(value || 0)).toLocaleString("es-CO")}`;
@@ -206,6 +207,39 @@ export default function SnackAnalyticsDashboard({ fromDate = "", toDate = "" }: 
                 <span>{money(item.costo)}</span>
                 <strong>{money(item.ganancia)}</strong>
                 <span>{pct(item.margen)}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="crm-card-head" style={{ borderTop: "1px solid #f0ece5" }}>
+            <div>
+              <span className="crm-card-kicker">Puntos de venta</span>
+              <h2>Taquilla 1 vs. Enclave</h2>
+              <p>Compara qué punto vende más y dónde rota mejor el inventario.</p>
+            </div>
+            <ShoppingCart size={20} />
+          </div>
+
+          <div className="crm-ranking-table">
+            <div className="crm-ranking-row header" style={{ gridTemplateColumns: "2fr repeat(3,1fr)", minWidth: 650 }}>
+              <span>Punto</span>
+              <span>Ventas</span>
+              <span>Unidades</span>
+              <span>Ingresos</span>
+            </div>
+
+            {data.ubicaciones.length === 0 ? (
+              <div className="crm-empty">Aún no hay ventas separadas por punto.</div>
+            ) : data.ubicaciones.map((item) => (
+              <div
+                className="crm-ranking-row"
+                style={{ gridTemplateColumns: "2fr repeat(3,1fr)", minWidth: 650 }}
+                key={item.ubicacion_codigo}
+              >
+                <strong>{item.ubicacion}</strong>
+                <span>{item.ventas}</span>
+                <span>{item.unidades}</span>
+                <strong>{money(item.ingresos)}</strong>
               </div>
             ))}
           </div>
