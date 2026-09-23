@@ -13,7 +13,9 @@ export default function RoleHomePage() {
 
   useEffect(() => {
     let active = true;
-    (async () => {
+    let timer: number | null = null;
+
+    const load = async () => {
       try {
         const current = await getCurrentRole();
         if (!active) return;
@@ -26,8 +28,17 @@ export default function RoleHomePage() {
       } finally {
         if (active) setLoading(false);
       }
-    })();
-    return () => { active = false; };
+    };
+
+    void load();
+    timer = window.setInterval(() => void load(), 15000);
+    window.addEventListener("focus", load);
+
+    return () => {
+      active = false;
+      if (timer != null) window.clearInterval(timer);
+      window.removeEventListener("focus", load);
+    };
   }, []);
 
   if (loading) return <div className="grid min-h-[40vh] place-items-center"><p>Cargando perfil…</p></div>;
