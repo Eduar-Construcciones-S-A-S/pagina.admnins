@@ -5,10 +5,13 @@ import {
   setGuideSalesAccess,
   type GuideSalesAccessRow,
 } from "../services/guideSalesAccess.service";
+import { getCurrentRole } from "../services/role.service";
+import UserManagementPanel from "../components/admin/UserManagementPanel";
 import "../styles/snacks.css";
 
 export default function AccesosGuiasPage() {
   const [guides, setGuides] = useState<GuideSalesAccessRow[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [savingKey, setSavingKey] = useState("");
@@ -29,6 +32,11 @@ export default function AccesosGuiasPage() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    getCurrentRole()
+      .then((current) => setIsAdmin(current?.role === "administrador"))
+      .catch(() => setIsAdmin(false));
+  }, []);
 
   const toggle = async (
     guide: GuideSalesAccessRow,
@@ -77,6 +85,8 @@ export default function AccesosGuiasPage() {
         <div><span>Con Enclave</span><b>{guides.filter((g) => g.enclave).length}</b></div>
         <div><span>Sin ventas habilitadas</span><b>{guides.filter((g) => !g.taquilla_1 && !g.enclave).length}</b></div>
       </div>
+
+      {isAdmin && <UserManagementPanel />}
 
       <section className="snack-card">
         <div className="snack-card-title">
