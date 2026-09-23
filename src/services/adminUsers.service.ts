@@ -16,7 +16,7 @@ export type ManagedUser = {
 };
 
 async function invokeAdminUsers(body: Record<string, unknown>) {
-  const { data, error } = await client().functions.invoke("admin-users", { body });
+  const { data, error } = await client().functions.invoke("clever-handler", { body });
   if (error) throw error;
   if (data?.error) throw new Error(String(data.error));
   return data;
