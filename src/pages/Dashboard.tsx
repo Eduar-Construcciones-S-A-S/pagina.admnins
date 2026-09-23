@@ -8,7 +8,7 @@ import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { logout } from "../services/auth.service";
 import { appRoleLabel, getCurrentRole, type AppRole } from "../services/role.service";
 import { getMyGuideSalesPermissions, type GuideSalesPermissions } from "../services/guideSalesAccess.service";
-import { CalendarDays, Package, Users, UserCheck, LogOut, Menu, X, LayoutDashboard, ClipboardList, ChevronLeft, ChevronRight, Settings2, Tags, ShoppingCart, Boxes, CirclePlus, Store, ArrowRightLeft, ShieldCheck } from "lucide-react";
+import { CalendarDays, Package, Users, UserCheck, LogOut, Menu, X, LayoutDashboard, ClipboardList, ChevronLeft, ChevronRight, Settings2, Tags, ShoppingCart, Boxes, CirclePlus, Store, ArrowRightLeft, ShieldCheck, HandCoins } from "lucide-react";
 
 const SIDEBAR_KEY = "checua:sidebar_collapsed";
 const INACTIVITY_LIMIT_MS = 15 * 60 * 1000;
@@ -22,6 +22,7 @@ const ALL_NAV_LINKS = [
   { to: "/app/inventario-snacks", label: "Inventarios snacks", icon: <Boxes size={16} />, roles: ["administrador", "coordinador"] as AppRole[] },
   { to: "/app/transferencias-snacks", label: "Transferir snacks", icon: <ArrowRightLeft size={16} />, roles: ["administrador"] as AppRole[] },
   { to: "/app/accesos-guias", label: "Accesos de guías", icon: <ShieldCheck size={16} />, roles: ["administrador", "coordinador"] as AppRole[] },
+  { to: "/app/entrega-efectivo", label: "Entrega de efectivo", icon: <HandCoins size={16} />, roles: ["administrador", "coordinador", "guia"] as AppRole[] },
   { to: "/app/planes", label: "Planes", icon: <Package size={16} />, roles: ["administrador"] as AppRole[] },
   { to: "/app/clientes", label: "Clientes", icon: <Users size={16} />, roles: ["administrador"] as AppRole[] },
   { to: "/app/participantes", label: "Participantes", icon: <UserCheck size={16} />, roles: ["administrador"] as AppRole[] },
