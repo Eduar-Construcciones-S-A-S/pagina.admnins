@@ -17,6 +17,7 @@ import InventarioSnacksPage from "./pages/InventarioSnacksPage";
 import VentasSnacksPage from "./pages/VentasSnacksPage";
 import TransferenciaSnacksPage from "./pages/TransferenciaSnacksPage";
 import AccesosGuiasPage from "./pages/AccesosGuiasPage";
+import EntregaEfectivoPage from "./pages/EntregaEfectivoPage";
 import SalesAccessRoute from "./components/SalesAccessRoute";
 import ProtectedRoute from "./components/ProtectedRoute";
 import RoleRoute from "./components/RoleRoute";
@@ -51,6 +52,7 @@ export default function App() {
           <Route path="inventario-snacks" element={<RoleRoute allow={["administrador", "coordinador"]}><InventarioSnacksPage /></RoleRoute>} />
           <Route path="transferencias-snacks" element={<RoleRoute allow={["administrador"]}><TransferenciaSnacksPage /></RoleRoute>} />
           <Route path="accesos-guias" element={<RoleRoute allow={["administrador", "coordinador"]}><AccesosGuiasPage /></RoleRoute>} />
+          <Route path="entrega-efectivo" element={<RoleRoute allow={["administrador", "coordinador", "guia"]}><EntregaEfectivoPage /></RoleRoute>} />
           <Route path="planes" element={<RoleRoute allow={["administrador"]}><PlanesPage /></RoleRoute>} />
           <Route path="clientes" element={<RoleRoute allow={["administrador"]}><ClientesPage /></RoleRoute>} />
           <Route path="participantes" element={<RoleRoute allow={["administrador"]}><ParticipantesPage /></RoleRoute>} />
