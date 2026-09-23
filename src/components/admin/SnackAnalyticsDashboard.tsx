@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Banknote, Package, RefreshCw, ShoppingCart, TrendingDown, TrendingUp, Trophy } from "lucide-react";
 import { getSnackAdminDashboard, type SnackAdminDashboard } from "../../services/snack.service";
-import "../../styles/snacks.css";
 
 type Props = {
   fromDate?: string;
@@ -34,6 +33,31 @@ const money = (value: number) => `$${Math.round(Number(value || 0)).toLocaleStri
 const pct = (value: number) => `${Number(value || 0).toFixed(1)}%`;
 const methodLabel = (value: string) => value.replace(/\b\w/g, (c) => c.toUpperCase());
 
+function Metric({
+  icon,
+  label,
+  value,
+  helper,
+  tone,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  helper: string;
+  tone: "gold" | "green" | "red" | "blue" | "violet" | "teal";
+}) {
+  return (
+    <div className={`crm-kpi crm-kpi-${tone}`}>
+      <div className="crm-kpi-top">
+        <div className="crm-kpi-icon">{icon}</div>
+        <span>{label}</span>
+      </div>
+      <strong>{value}</strong>
+      <small>{helper}</small>
+    </div>
+  );
+}
+
 export default function SnackAnalyticsDashboard({ fromDate = "", toDate = "" }: Props) {
   const [data, setData] = useState<SnackAdminDashboard>(EMPTY);
   const [loading, setLoading] = useState(true);
@@ -57,9 +81,11 @@ export default function SnackAnalyticsDashboard({ fromDate = "", toDate = "" }: 
     void load();
     const timer = window.setInterval(() => void load(true), 30_000);
     const refresh = () => void load(true);
+
     window.addEventListener("snack-sale-recorded", refresh);
     window.addEventListener("snack-cost-changed", refresh);
     window.addEventListener("snack-stock-changed", refresh);
+
     return () => {
       window.clearInterval(timer);
       window.removeEventListener("snack-sale-recorded", refresh);
@@ -78,119 +104,143 @@ export default function SnackAnalyticsDashboard({ fromDate = "", toDate = "" }: 
     : "Todo el histórico";
 
   return (
-    <section className="snack-card" style={{ marginBottom: 18 }}>
-      <div className="snack-card-title">
+    <section className="crm-card crm-ranking-card">
+      <div className="crm-card-head">
         <div>
-          <ShoppingCart size={19} />
-          <div>
-            <strong style={{ display: "block" }}>Analítica de snacks</strong>
-            <small style={{ display: "block", marginTop: 3, color: "#64748b", fontWeight: 500 }}>
-              Rentabilidad, rotación, merma e inventario · {periodLabel}
-            </small>
-          </div>
+          <span className="crm-card-kicker">Snacks · inteligencia comercial</span>
+          <h2>Rentabilidad y desempeño de snacks</h2>
+          <p>Ingresos, costos, margen, rotación, inventario y merma · {periodLabel}</p>
         </div>
-        <button className="snack-btn secondary" onClick={() => load(true)} disabled={refreshing}>
-          <RefreshCw size={15} className={refreshing ? "spin-icon" : ""} />
+        <button className="crm-filter-clear" onClick={() => load(true)} disabled={refreshing}>
+          <RefreshCw size={14} className={refreshing ? "spin-icon" : ""} />
           {refreshing ? "Actualizando…" : "Actualizar"}
         </button>
       </div>
 
-      {error && <div className="snack-alert error">{error}</div>}
+      {error && <div className="crm-error" style={{ margin: 16 }}>{error}</div>}
+
       {loading ? (
-        <div className="snack-empty">Cargando métricas de snacks…</div>
+        <div className="crm-empty">Cargando métricas de snacks…</div>
       ) : (
         <>
           {(data.lineas_sin_costo > 0 || data.productos_sin_costo > 0) && (
-            <div className="snack-alert error" style={{ marginBottom: 12 }}>
+            <div className="crm-error" style={{ margin: "16px 18px 0" }}>
               Hay {data.productos_sin_costo} producto(s) sin precio de compra y {data.lineas_sin_costo} línea(s) de venta sin costo histórico.
-              La ganancia mostrada puede estar incompleta hasta configurar esos costos.
+              La ganancia puede estar incompleta hasta configurar esos costos.
             </div>
           )}
 
-          <div className="snack-kpis">
-            <div><span>Ventas snacks</span><b>{money(data.ingresos)}</b><small>{data.ventas} ventas · {data.unidades} unidades</small></div>
-            <div><span>Ganancia bruta</span><b>{money(data.ganancia_bruta)}</b><small>{money(data.costo_vendido)} costo vendido</small></div>
-            <div><span>Margen</span><b>{pct(data.margen)}</b><small>{data.costos_estimados ? `${data.costos_estimados} costos históricos estimados` : "Costos históricos registrados"}</small></div>
-            <div><span>Ticket promedio</span><b>{money(data.ticket_promedio)}</b><small>Por venta de snacks</small></div>
-            <div><span>Capital invertido</span><b>{money(data.capital_invertido)}</b><small>{data.stock_unidades} unidades en inventario</small></div>
-            <div><span>Ganancia potencial</span><b>{money(data.ganancia_potencial)}</b><small>{money(data.valor_potencial_venta)} venta potencial</small></div>
-            <div className={data.costo_retiros > 0 ? "warning" : ""}><span>Merma por retiros</span><b>{money(data.costo_retiros)}</b><small>{data.retiros_unidades} unidades retiradas</small></div>
-            <div><span>Productos activos</span><b>{data.productos_activos}</b><small>{data.productos_sin_costo} sin costo configurado</small></div>
+          <div className="crm-kpis" style={{ padding: "16px 18px" }}>
+            <Metric icon={<ShoppingCart size={20} />} label="Ventas snacks" value={money(data.ingresos)} helper={`${data.ventas} ventas · ${data.unidades} unidades`} tone="green" />
+            <Metric icon={<TrendingUp size={20} />} label="Ganancia bruta" value={money(data.ganancia_bruta)} helper={`${money(data.costo_vendido)} costo vendido`} tone="gold" />
+            <Metric icon={<TrendingUp size={20} />} label="Margen" value={pct(data.margen)} helper={data.costos_estimados ? `${data.costos_estimados} costos históricos estimados` : "Costos históricos registrados"} tone="blue" />
+            <Metric icon={<Banknote size={20} />} label="Ticket promedio" value={money(data.ticket_promedio)} helper="Por venta de snacks" tone="violet" />
+            <Metric icon={<Package size={20} />} label="Capital invertido" value={money(data.capital_invertido)} helper={`${data.stock_unidades} unidades en inventario`} tone="teal" />
+            <Metric icon={<TrendingUp size={20} />} label="Ganancia potencial" value={money(data.ganancia_potencial)} helper={`${money(data.valor_potencial_venta)} venta potencial`} tone="green" />
+            <Metric icon={<TrendingDown size={20} />} label="Merma por retiros" value={money(data.costo_retiros)} helper={`${data.retiros_unidades} unidades retiradas`} tone="red" />
+            <Metric icon={<Package size={20} />} label="Productos activos" value={String(data.productos_activos)} helper={`${data.productos_sin_costo} sin costo configurado`} tone="gold" />
           </div>
 
-          <div className="snack-kpis" style={{ marginTop: 12 }}>
-            <div>
-              <span><Trophy size={13} style={{ verticalAlign: -2, marginRight: 5 }} />Más vendido</span>
-              <b style={{ fontSize: 17 }}>{data.top_productos[0]?.nombre_producto || "Sin ventas"}</b>
-              <small>{data.top_productos[0] ? `${data.top_productos[0].unidades} unidades · ${money(data.top_productos[0].ingresos)}` : "Sin datos"}</small>
+          <div className="crm-decision-strip" style={{ margin: "0 18px 16px" }}>
+            <div className="crm-decision-item">
+              <Trophy size={18} />
+              <div>
+                <span>Snack más vendido</span>
+                <strong>{data.top_productos[0]?.nombre_producto || "Sin ventas"}</strong>
+                <small>{data.top_productos[0] ? `${data.top_productos[0].unidades} unidades · ${money(data.top_productos[0].ingresos)}` : "Sin resultados"}</small>
+              </div>
             </div>
-            <div>
-              <span><TrendingUp size={13} style={{ verticalAlign: -2, marginRight: 5 }} />Más rentable</span>
-              <b style={{ fontSize: 17 }}>{mostProfitable?.nombre_producto || "Sin ventas"}</b>
-              <small>{mostProfitable ? `${money(mostProfitable.ganancia)} de ganancia · ${pct(mostProfitable.margen)} margen` : "Sin datos"}</small>
+            <div className="crm-decision-item">
+              <TrendingUp size={18} />
+              <div>
+                <span>Snack más rentable</span>
+                <strong>{mostProfitable?.nombre_producto || "Sin ventas"}</strong>
+                <small>{mostProfitable ? `${money(mostProfitable.ganancia)} · ${pct(mostProfitable.margen)} margen` : "Sin resultados"}</small>
+              </div>
             </div>
-            <div>
-              <span><Package size={13} style={{ verticalAlign: -2, marginRight: 5 }} />Inventario</span>
-              <b style={{ fontSize: 17 }}>{data.stock_unidades} unidades</b>
-              <small>{money(data.capital_invertido)} inmovilizado en stock</small>
+            <div className="crm-decision-item">
+              <Package size={18} />
+              <div>
+                <span>Stock disponible</span>
+                <strong>{data.stock_unidades} unidades</strong>
+                <small>{money(data.capital_invertido)} en inventario</small>
+              </div>
             </div>
-            <div>
-              <span><TrendingDown size={13} style={{ verticalAlign: -2, marginRight: 5 }} />Pérdida por retiros</span>
-              <b style={{ fontSize: 17 }}>{money(data.costo_retiros)}</b>
-              <small>Vencidos, dañados u otros retiros</small>
-            </div>
-          </div>
-
-          <div className="snack-card" style={{ boxShadow: "none", marginTop: 14 }}>
-            <div className="snack-card-title">
-              <div><TrendingUp size={17} /><strong>Desempeño por snack</strong></div>
-              <span>Ordenado por unidades vendidas</span>
-            </div>
-            <div className="snack-table-wrap">
-              <table className="snack-table">
-                <thead>
-                  <tr><th>Snack</th><th>Unidades</th><th>Ingresos</th><th>Costo</th><th>Ganancia</th><th>Margen</th></tr>
-                </thead>
-                <tbody>
-                  {data.top_productos.length === 0 ? (
-                    <tr><td colSpan={6} className="snack-empty">Aún no hay ventas de snacks en este periodo.</td></tr>
-                  ) : data.top_productos.slice(0, 10).map((item, index) => (
-                    <tr key={item.id_producto ?? item.nombre_producto}>
-                      <td><strong>#{index + 1} · {item.nombre_producto}</strong>{item.lineas_sin_costo > 0 && <small style={{ display: "block", color: "#b45309", marginTop: 3 }}>{item.lineas_sin_costo} línea(s) sin costo</small>}</td>
-                      <td>{item.unidades}</td>
-                      <td>{money(item.ingresos)}</td>
-                      <td>{money(item.costo)}</td>
-                      <td><strong>{money(item.ganancia)}</strong></td>
-                      <td>{pct(item.margen)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="crm-decision-item">
+              <TrendingDown size={18} />
+              <div>
+                <span>Merma</span>
+                <strong>{money(data.costo_retiros)}</strong>
+                <small>Vencidos, dañados u otros retiros</small>
+              </div>
             </div>
           </div>
 
-          <div className="snack-card" style={{ boxShadow: "none", marginTop: 14 }}>
-            <div className="snack-card-title">
-              <div><Banknote size={17} /><strong>Ventas por método de pago</strong></div>
-              <span>{data.ventas} ventas</span>
+          <div className="crm-ranking-table">
+            <div className="crm-ranking-row header">
+              <span>Snack</span>
+              <span>Unidades</span>
+              <span>Ingresos</span>
+              <span>Costo</span>
+              <span>Ganancia</span>
+              <span>Margen</span>
             </div>
-            <div className="snack-table-wrap">
-              <table className="snack-table">
-                <thead><tr><th>Método</th><th>Ventas</th><th>Recaudo</th><th>Participación</th></tr></thead>
-                <tbody>
-                  {data.metodos_pago.length === 0 ? (
-                    <tr><td colSpan={4} className="snack-empty">Sin ventas registradas.</td></tr>
-                  ) : data.metodos_pago.map((item) => (
-                    <tr key={item.medio_pago}>
-                      <td>{methodLabel(item.medio_pago)}</td>
-                      <td>{item.ventas}</td>
-                      <td><strong>{money(item.total)}</strong></td>
-                      <td>{pct(data.ingresos ? item.total / data.ingresos * 100 : 0)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+
+            {data.top_productos.length === 0 ? (
+              <div className="crm-empty">Aún no hay ventas de snacks en este periodo.</div>
+            ) : data.top_productos.slice(0, 10).map((item, index) => (
+              <div className="crm-ranking-row" key={item.id_producto ?? item.nombre_producto}>
+                <div className="crm-plan-name">
+                  <span className={`crm-rank ${index < 3 ? `top-${index + 1}` : ""}`}>{index + 1}</span>
+                  <div>
+                    <strong>{item.nombre_producto}</strong>
+                    {item.lineas_sin_costo > 0 && (
+                      <span style={{ display: "block", fontSize: 10, color: "#b45309", marginTop: 2 }}>
+                        {item.lineas_sin_costo} línea(s) sin costo
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <strong>{item.unidades}</strong>
+                <strong>{money(item.ingresos)}</strong>
+                <span>{money(item.costo)}</span>
+                <strong>{money(item.ganancia)}</strong>
+                <span>{pct(item.margen)}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="crm-card-head" style={{ borderTop: "1px solid #f0ece5" }}>
+            <div>
+              <span className="crm-card-kicker">Caja snacks</span>
+              <h2>Ventas por método de pago</h2>
+              <p>Distribución del recaudo generado por snacks.</p>
             </div>
+            <Banknote size={20} />
+          </div>
+
+          <div className="crm-ranking-table">
+            <div className="crm-ranking-row header" style={{ gridTemplateColumns: "2fr repeat(3,1fr)", minWidth: 650 }}>
+              <span>Método</span>
+              <span>Ventas</span>
+              <span>Recaudo</span>
+              <span>Participación</span>
+            </div>
+
+            {data.metodos_pago.length === 0 ? (
+              <div className="crm-empty">Sin ventas registradas.</div>
+            ) : data.metodos_pago.map((item) => (
+              <div
+                className="crm-ranking-row"
+                style={{ gridTemplateColumns: "2fr repeat(3,1fr)", minWidth: 650 }}
+                key={item.medio_pago}
+              >
+                <strong>{methodLabel(item.medio_pago)}</strong>
+                <span>{item.ventas}</span>
+                <strong>{money(item.total)}</strong>
+                <span>{pct(data.ingresos ? item.total / data.ingresos * 100 : 0)}</span>
+              </div>
+            ))}
           </div>
         </>
       )}
