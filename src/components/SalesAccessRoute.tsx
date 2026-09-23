@@ -46,11 +46,15 @@ export default function SalesAccessRoute({ location, children }: Props) {
     void verify();
 
     const refresh = () => void verify();
+    const timer = window.setInterval(() => void verify(), 15000);
     window.addEventListener("guide-sales-access-changed", refresh);
+    window.addEventListener("focus", refresh);
 
     return () => {
       active = false;
+      window.clearInterval(timer);
       window.removeEventListener("guide-sales-access-changed", refresh);
+      window.removeEventListener("focus", refresh);
     };
   }, [location]);
 
