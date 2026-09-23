@@ -165,8 +165,27 @@ BEGIN
 END;
 $$;
 
-ALTER TABLE public.snack_inventario_movimiento
-DROP CONSTRAINT IF EXISTS snack_inventario_movimiento_tipo_check;
+DO $
+DECLARE
+  v_constraint RECORD;
+BEGIN
+  FOR v_constraint IN
+    SELECT c.conname
+    FROM pg_constraint c
+    INNER JOIN pg_class t ON t.oid = c.conrelid
+    INNER JOIN pg_namespace n ON n.oid = t.relnamespace
+    WHERE n.nspname = 'public'
+      AND t.relname = 'snack_inventario_movimiento'
+      AND c.contype = 'c'
+      AND pg_get_constraintdef(c.oid) ILIKE '%tipo%'
+  LOOP
+    EXECUTE format(
+      'ALTER TABLE public.snack_inventario_movimiento DROP CONSTRAINT %I',
+      v_constraint.conname
+    );
+  END LOOP;
+END;
+$;
 
 ALTER TABLE public.snack_inventario_movimiento
 ADD CONSTRAINT snack_inventario_movimiento_tipo_check
