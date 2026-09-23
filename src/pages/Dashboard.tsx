@@ -49,6 +49,30 @@ function Dashboard() {
   }) : [];
 
   useEffect(() => { setMenuOpen(false); }, [location.pathname]);
+
+  useEffect(() => {
+    if (role !== "guia") return;
+
+    let active = true;
+    const syncAccess = async () => {
+      try {
+        const access = await getMyGuideSalesPermissions();
+        if (active) setGuideSalesAccess(access);
+      } catch {
+        if (active) setGuideSalesAccess({ taquilla_1: false, enclave: false });
+      }
+    };
+
+    void syncAccess();
+    const timer = window.setInterval(() => void syncAccess(), 30000);
+    window.addEventListener("focus", syncAccess);
+
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", syncAccess);
+    };
+  }, [role]);
   useEffect(() => { localStorage.setItem(SIDEBAR_KEY, String(sidebarCollapsed)); }, [sidebarCollapsed]);
   useEffect(() => {
     if (!menuOpen) return;
