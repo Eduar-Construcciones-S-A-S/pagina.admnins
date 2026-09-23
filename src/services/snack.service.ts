@@ -17,6 +17,43 @@ export type SnackProduct = {
   updated_at?: string;
 };
 
+export type SnackAdminProduct = SnackProduct & {
+  precio_compra: number | null;
+};
+
+export type SnackAdminDashboardProduct = {
+  id_producto: number | null;
+  nombre_producto: string;
+  unidades: number;
+  ingresos: number;
+  costo: number;
+  ganancia: number;
+  margen: number;
+  lineas_sin_costo: number;
+};
+
+export type SnackAdminDashboard = {
+  ventas: number;
+  ingresos: number;
+  unidades: number;
+  costo_vendido: number;
+  ganancia_bruta: number;
+  margen: number;
+  ticket_promedio: number;
+  lineas_sin_costo: number;
+  costos_estimados: number;
+  retiros_unidades: number;
+  costo_retiros: number;
+  productos_activos: number;
+  stock_unidades: number;
+  capital_invertido: number;
+  valor_potencial_venta: number;
+  ganancia_potencial: number;
+  productos_sin_costo: number;
+  top_productos: SnackAdminDashboardProduct[];
+  metodos_pago: Array<{ medio_pago: string; ventas: number; total: number }>;
+};
+
 export type SnackSaleItem = {
   id_detalle: number;
   id_venta: number;
@@ -72,6 +109,103 @@ export async function getSnackProducts(includeInactive = false): Promise<SnackPr
     precio: num(row.precio),
     activo: row.activo !== false,
   })) as SnackProduct[];
+}
+
+
+export async function getSnackProductsAdmin(includeInactive = true): Promise<SnackAdminProduct[]> {
+  await requireAdmin();
+
+  let productQuery = client()
+    .from("snack_producto")
+    .select("id_producto,numero_producto,nombre_producto,cantidad,precio,activo,created_at,updated_at")
+    .order("numero_producto", { ascending: true });
+
+  if (!includeInactive) productQuery = productQuery.eq("activo", true);
+
+  const [{ data: products, error: productError }, { data: costs, error: costError }] = await Promise.all([
+    productQuery,
+    client().from("snack_producto_costo").select("id_producto,precio_compra"),
+  ]);
+
+  if (productError) throw productError;
+  if (costError) throw costError;
+
+  const costMap = new Map<number, number>();
+  for (const row of costs ?? []) {
+    costMap.set(Number((row as any).id_producto), num((row as any).precio_compra));
+  }
+
+  return (products ?? []).map((row: any) => ({
+    ...row,
+    id_producto: Number(row.id_producto),
+    cantidad: num(row.cantidad),
+    precio: num(row.precio),
+    activo: row.activo !== false,
+    precio_compra: costMap.has(Number(row.id_producto)) ? costMap.get(Number(row.id_producto))! : null,
+  })) as SnackAdminProduct[];
+}
+
+export async function saveSnackPurchasePrice(idProducto: number, precioCompra: number) {
+  await requireAdmin();
+  const price = num(precioCompra);
+  if (!Number.isFinite(price) || price < 0) {
+    throw new Error("El precio de compra debe ser igual o mayor a cero.");
+  }
+
+  const { data, error } = await client().rpc("admin_guardar_costo_snack", {
+    p_id_producto: Number(idProducto),
+    p_precio_compra: price,
+  });
+  if (error) throw error;
+
+  window.dispatchEvent(new CustomEvent("snack-cost-changed"));
+  return data;
+}
+
+export async function getSnackAdminDashboard(fromDate?: string | null, toDate?: string | null): Promise<SnackAdminDashboard> {
+  await requireAdmin();
+
+  const { data, error } = await client().rpc("admin_resumen_snacks", {
+    p_desde: fromDate || null,
+    p_hasta: toDate || null,
+  });
+  if (error) throw error;
+
+  const raw: any = data ?? {};
+  return {
+    ventas: num(raw.ventas),
+    ingresos: num(raw.ingresos),
+    unidades: num(raw.unidades),
+    costo_vendido: num(raw.costo_vendido),
+    ganancia_bruta: num(raw.ganancia_bruta),
+    margen: num(raw.margen),
+    ticket_promedio: num(raw.ticket_promedio),
+    lineas_sin_costo: num(raw.lineas_sin_costo),
+    costos_estimados: num(raw.costos_estimados),
+    retiros_unidades: num(raw.retiros_unidades),
+    costo_retiros: num(raw.costo_retiros),
+    productos_activos: num(raw.productos_activos),
+    stock_unidades: num(raw.stock_unidades),
+    capital_invertido: num(raw.capital_invertido),
+    valor_potencial_venta: num(raw.valor_potencial_venta),
+    ganancia_potencial: num(raw.ganancia_potencial),
+    productos_sin_costo: num(raw.productos_sin_costo),
+    top_productos: Array.isArray(raw.top_productos) ? raw.top_productos.map((row: any) => ({
+      id_producto: row.id_producto == null ? null : Number(row.id_producto),
+      nombre_producto: String(row.nombre_producto ?? ""),
+      unidades: num(row.unidades),
+      ingresos: num(row.ingresos),
+      costo: num(row.costo),
+      ganancia: num(row.ganancia),
+      margen: num(row.margen),
+      lineas_sin_costo: num(row.lineas_sin_costo),
+    })) : [],
+    metodos_pago: Array.isArray(raw.metodos_pago) ? raw.metodos_pago.map((row: any) => ({
+      medio_pago: String(row.medio_pago ?? ""),
+      ventas: num(row.ventas),
+      total: num(row.total),
+    })) : [],
+  };
 }
 
 export async function createSnackProduct(payload: {
