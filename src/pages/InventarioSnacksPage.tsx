@@ -2,11 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArchiveRestore, PackageMinus, PackagePlus, Pencil, RefreshCw, Save, Search, X } from "lucide-react";
 import {
   createSnackProduct,
-  getSnackProducts,
+  getSnackProductsAdmin,
+  saveSnackPurchasePrice,
   setSnackProductActive,
   updateSnackProduct,
   withdrawSnackStock,
-  type SnackProduct,
+  type SnackAdminProduct,
 } from "../services/snack.service";
 import "../styles/snacks.css";
 
@@ -17,12 +18,13 @@ type FormState = {
   nombre_producto: string;
   cantidad: string;
   precio: string;
+  precio_compra: string;
 };
 
-const emptyForm: FormState = { numero_producto: "", nombre_producto: "", cantidad: "0", precio: "" };
+const emptyForm: FormState = { numero_producto: "", nombre_producto: "", cantidad: "0", precio: "", precio_compra: "" };
 
 export default function InventarioSnacksPage() {
-  const [products, setProducts] = useState<SnackProduct[]>([]);
+  const [products, setProducts] = useState<SnackAdminProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -31,8 +33,8 @@ export default function InventarioSnacksPage() {
   const [success, setSuccess] = useState("");
   const [search, setSearch] = useState("");
   const [showInactive, setShowInactive] = useState(false);
-  const [editing, setEditing] = useState<SnackProduct | null>(null);
-  const [withdrawing, setWithdrawing] = useState<SnackProduct | null>(null);
+  const [editing, setEditing] = useState<SnackAdminProduct | null>(null);
+  const [withdrawing, setWithdrawing] = useState<SnackAdminProduct | null>(null);
   const [withdrawQty, setWithdrawQty] = useState("1");
   const [withdrawReason, setWithdrawReason] = useState("Vencimiento");
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -41,7 +43,7 @@ export default function InventarioSnacksPage() {
     silent ? setRefreshing(true) : setLoading(true);
     setError("");
     try {
-      setProducts(await getSnackProducts(true));
+      setProducts(await getSnackProductsAdmin(true));
     } catch (e: any) {
       setError(e?.message || "No fue posible cargar el inventario de snacks.");
     } finally {
@@ -62,7 +64,9 @@ export default function InventarioSnacksPage() {
   }, [products, search, showInactive]);
 
   const stockTotal = products.filter((p) => p.activo).reduce((sum, p) => sum + p.cantidad, 0);
-  const inventoryValue = products.filter((p) => p.activo).reduce((sum, p) => sum + p.cantidad * p.precio, 0);
+  const inventoryCost = products.filter((p) => p.activo).reduce((sum, p) => sum + p.cantidad * Number(p.precio_compra || 0), 0);
+  const potentialRevenue = products.filter((p) => p.activo).reduce((sum, p) => sum + p.cantidad * p.precio, 0);
+  const potentialProfit = potentialRevenue - inventoryCost;
   const lowStock = products.filter((p) => p.activo && p.cantidad <= 5).length;
 
   const startCreate = () => {
@@ -72,20 +76,21 @@ export default function InventarioSnacksPage() {
     setSuccess("");
   };
 
-  const startEdit = (product: SnackProduct) => {
+  const startEdit = (product: SnackAdminProduct) => {
     setEditing(product);
     setForm({
       numero_producto: product.numero_producto,
       nombre_producto: product.nombre_producto,
       cantidad: String(product.cantidad),
       precio: String(product.precio),
+      precio_compra: product.precio_compra == null ? "" : String(product.precio_compra),
     });
     setWithdrawing(null);
     setError("");
     setSuccess("");
   };
 
-  const startWithdrawal = (product: SnackProduct) => {
+  const startWithdrawal = (product: SnackAdminProduct) => {
     setWithdrawing(product);
     setEditing(null);
     setWithdrawQty(product.cantidad > 0 ? "1" : "0");
@@ -97,6 +102,7 @@ export default function InventarioSnacksPage() {
   const save = async () => {
     const cantidad = Number(form.cantidad || 0);
     const precio = Number(form.precio || 0);
+    const precioCompra = Number(form.precio_compra || 0);
     if (!form.numero_producto.trim() || !form.nombre_producto.trim()) {
       setError("Número y nombre del producto son obligatorios.");
       return;
@@ -106,7 +112,11 @@ export default function InventarioSnacksPage() {
       return;
     }
     if (!Number.isFinite(precio) || precio <= 0) {
-      setError("El precio debe ser mayor a cero.");
+      setError("El precio de venta debe ser mayor a cero.");
+      return;
+    }
+    if (!Number.isFinite(precioCompra) || precioCompra < 0) {
+      setError("El precio de compra debe ser igual o mayor a cero.");
       return;
     }
 
@@ -122,10 +132,12 @@ export default function InventarioSnacksPage() {
       };
       if (editing) {
         await updateSnackProduct(editing.id_producto, payload);
-        setSuccess("Producto actualizado correctamente.");
+        await saveSnackPurchasePrice(editing.id_producto, precioCompra);
+        setSuccess("Producto y precio de compra actualizados correctamente.");
       } else {
-        await createSnackProduct(payload);
-        setSuccess("Producto agregado al inventario.");
+        const created: any = await createSnackProduct(payload);
+        await saveSnackPurchasePrice(Number(created.id_producto), precioCompra);
+        setSuccess("Producto agregado al inventario con su precio de compra.");
       }
       setEditing(null);
       setForm(emptyForm);
@@ -171,7 +183,7 @@ export default function InventarioSnacksPage() {
     }
   };
 
-  const toggleActive = async (product: SnackProduct) => {
+  const toggleActive = async (product: SnackAdminProduct) => {
     setError("");
     setSuccess("");
     try {
@@ -188,7 +200,7 @@ export default function InventarioSnacksPage() {
       <div className="snack-page-head">
         <div>
           <h1>Inventario de snacks</h1>
-          <p>Administra productos, existencias y precios de venta.</p>
+          <p>Administra productos, existencias, costo de compra y precio de venta. El costo solo es visible para administradores.</p>
         </div>
         <button className="snack-btn secondary" onClick={() => load(true)} disabled={refreshing}>
           <RefreshCw size={16} className={refreshing ? "spin-icon" : ""} /> Actualizar
@@ -201,7 +213,8 @@ export default function InventarioSnacksPage() {
       <div className="snack-kpis">
         <div><span>Productos activos</span><b>{products.filter((p) => p.activo).length}</b></div>
         <div><span>Unidades disponibles</span><b>{stockTotal}</b></div>
-        <div><span>Valor del inventario</span><b>{money(inventoryValue)}</b></div>
+        <div><span>Capital invertido</span><b>{money(inventoryCost)}</b></div>
+        <div><span>Ganancia potencial</span><b>{money(potentialProfit)}</b></div>
         <div className={lowStock ? "warning" : ""}><span>Stock bajo ≤ 5</span><b>{lowStock}</b></div>
       </div>
 
@@ -214,6 +227,7 @@ export default function InventarioSnacksPage() {
           <label>Número de producto *<input value={form.numero_producto} onChange={(e) => setForm({ ...form, numero_producto: e.target.value })} placeholder="Ej. SNK-001" /></label>
           <label>Nombre del producto *<input value={form.nombre_producto} onChange={(e) => setForm({ ...form, nombre_producto: e.target.value })} placeholder="Ej. Agua 600 ml" /></label>
           <label>Cantidad *<input type="number" min={0} step={1} value={form.cantidad} onChange={(e) => setForm({ ...form, cantidad: e.target.value })} /></label>
+          <label>Precio de compra *<input type="number" min={0} step={100} value={form.precio_compra} onChange={(e) => setForm({ ...form, precio_compra: e.target.value })} placeholder="2000" /></label>
           <label>Precio de venta *<input type="number" min={0} step={100} value={form.precio} onChange={(e) => setForm({ ...form, precio: e.target.value })} placeholder="5000" /></label>
           <button className="snack-btn primary" disabled={saving} onClick={save}><Save size={16} /> {saving ? "Guardando…" : editing ? "Guardar cambios" : "Agregar producto"}</button>
         </div>
@@ -245,14 +259,16 @@ export default function InventarioSnacksPage() {
 
         <div className="snack-table-wrap">
           <table className="snack-table">
-            <thead><tr><th>N.º producto</th><th>Producto</th><th>Cantidad</th><th>Precio</th><th>Estado</th><th>Acciones</th></tr></thead>
+            <thead><tr><th>N.º producto</th><th>Producto</th><th>Cantidad</th><th>Precio compra</th><th>Precio venta</th><th>Ganancia/u</th><th>Estado</th><th>Acciones</th></tr></thead>
             <tbody>
-              {loading ? <tr><td colSpan={6} className="snack-empty">Cargando inventario…</td></tr> : filtered.length === 0 ? <tr><td colSpan={6} className="snack-empty">No hay productos para mostrar.</td></tr> : filtered.map((product) => (
+              {loading ? <tr><td colSpan={8} className="snack-empty">Cargando inventario…</td></tr> : filtered.length === 0 ? <tr><td colSpan={8} className="snack-empty">No hay productos para mostrar.</td></tr> : filtered.map((product) => (
                 <tr key={product.id_producto} className={!product.activo ? "inactive" : ""}>
                   <td><strong>{product.numero_producto}</strong></td>
                   <td>{product.nombre_producto}</td>
                   <td><span className={`snack-stock ${product.cantidad <= 5 ? "low" : ""}`}>{product.cantidad}</span></td>
+                  <td>{product.precio_compra == null ? "Sin definir" : money(product.precio_compra)}</td>
                   <td>{money(product.precio)}</td>
+                  <td><strong>{product.precio_compra == null ? "—" : money(product.precio - product.precio_compra)}</strong></td>
                   <td><span className={`snack-status ${product.activo ? "active" : "inactive"}`}>{product.activo ? "Activo" : "Inactivo"}</span></td>
                   <td><div className="snack-actions"><button className="snack-icon-btn" onClick={() => startEdit(product)} title="Editar"><Pencil size={15} /></button><button className="snack-icon-btn" onClick={() => startWithdrawal(product)} disabled={product.cantidad <= 0} title="Retirar unidades del inventario"><PackageMinus size={15} /></button><button className="snack-icon-btn" onClick={() => toggleActive(product)} title={product.activo ? "Desactivar" : "Reactivar"}><ArchiveRestore size={15} /></button></div></td>
                 </tr>
