@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Banknote, Package, Percent, RefreshCw, ShoppingCart, TrendingDown, TrendingUp, Trophy } from "lucide-react";
+import { Banknote, Package, RefreshCw, ShoppingCart, TrendingDown, TrendingUp, Trophy } from "lucide-react";
 import { getSnackAdminDashboard, type SnackAdminDashboard } from "../../services/snack.service";
 import "../../styles/snacks.css";
 
