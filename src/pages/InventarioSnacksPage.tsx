@@ -141,20 +141,16 @@ export default function InventarioSnacksPage() {
       };
       if (editing) {
         await updateSnackProduct(editing.id_producto, payload);
-        await Promise.all([
-          saveSnackPurchasePrice(editing.id_producto, precioCompra),
-          setSnackStockByLocation(editing.id_producto, "taquilla_1", cantidadTaquilla, "Ajuste manual desde inventario"),
-          setSnackStockByLocation(editing.id_producto, "enclave", cantidadEnclave, "Ajuste manual desde inventario"),
-        ]);
+        await saveSnackPurchasePrice(editing.id_producto, precioCompra);
+        await setSnackStockByLocation(editing.id_producto, "taquilla_1", cantidadTaquilla, "Ajuste manual desde inventario");
+        await setSnackStockByLocation(editing.id_producto, "enclave", cantidadEnclave, "Ajuste manual desde inventario");
         setSuccess("Producto, costos e inventarios por punto actualizados correctamente.");
       } else {
         const created: any = await createSnackProduct({ ...payload, cantidad: 0 });
         const id = Number(created.id_producto);
-        await Promise.all([
-          saveSnackPurchasePrice(id, precioCompra),
-          setSnackStockByLocation(id, "taquilla_1", cantidadTaquilla, "Inventario inicial"),
-          setSnackStockByLocation(id, "enclave", cantidadEnclave, "Inventario inicial"),
-        ]);
+        await saveSnackPurchasePrice(id, precioCompra);
+        await setSnackStockByLocation(id, "taquilla_1", cantidadTaquilla, "Inventario inicial");
+        await setSnackStockByLocation(id, "enclave", cantidadEnclave, "Inventario inicial");
         setSuccess("Producto agregado a los inventarios de Taquilla 1 y Enclave.");
       }
       setEditing(null);
