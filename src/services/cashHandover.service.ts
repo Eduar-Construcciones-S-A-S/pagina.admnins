@@ -94,7 +94,7 @@ export async function listCashHandovers(): Promise<CashHandover[]> {
     estado: String(row.estado || "pendiente") as "pendiente" | "confirmada",
     observacion: String(row.observacion ?? ""),
     created_at: String(row.created_at ?? ""),
-    confirmado_at: row.confirmado_at ? String(row.confirmimado_at ?? row.confirmado_at) : null,
+    confirmado_at: row.confirmado_at ? String(row.confirmado_at) : null,
     confirmado_por: row.confirmado_por ? String(row.confirmado_por) : null,
   }));
 }
