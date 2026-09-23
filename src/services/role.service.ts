@@ -34,7 +34,7 @@ export async function getCurrentRole(): Promise<CurrentRole | null> {
   if (!["administrador", "atencion", "coordinador", "guia"].includes(String(roleName))) return null;
 
   return {
-    role: roleName,
+    role: roleName as AppRole,
     email,
     userId: user.id,
   };
