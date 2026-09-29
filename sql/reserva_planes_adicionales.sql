@@ -18,13 +18,21 @@ create table if not exists public.reserva_plan_adicional (
   created_by uuid default auth.uid(),
   created_at timestamptz not null default now(),
   removed_by uuid,
-  removed_at timestamptz,
-  constraint reserva_plan_adicional_origen_check check (
+  removed_at timestamptz
+);
+
+-- La restricción se administra fuera del CREATE TABLE para que el script
+-- pueda ejecutarse varias veces sin fallar si la tabla ya existe.
+alter table public.reserva_plan_adicional
+  drop constraint if exists reserva_plan_adicional_origen_check;
+
+alter table public.reserva_plan_adicional
+  add constraint reserva_plan_adicional_origen_check
+  check (
     (origen = 'plan' and id_plan_adicional is not null and id_adicional is null)
     or
     (origen = 'adicional' and id_adicional is not null and id_plan_adicional is null)
-  )
-);
+  );
 
 create index if not exists idx_reserva_plan_adicional_reserva
   on public.reserva_plan_adicional(id_reserva);
