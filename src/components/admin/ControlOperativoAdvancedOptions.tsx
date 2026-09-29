@@ -35,7 +35,7 @@ type ReservaResumen = {
   pagoSaldo: number;
 };
 
-const money = (value: number) => `${Number(value || 0).toLocaleString("es-CO")}`;
+const money = (value: number) => "$" + Number(value || 0).toLocaleString("es-CO");
 
 function opcionCoincideConAgregado(opcion: OpcionPlanAdicional, agregado: ReservaPlanAdicional) {
   if (opcion.origen !== agregado.origen) return false;
