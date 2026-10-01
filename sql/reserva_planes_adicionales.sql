@@ -260,3 +260,16 @@ revoke all on function public.retirar_plan_adicional_reserva(bigint) from public
 
 grant execute on function public.agregar_plan_adicional_reserva(integer,text,integer,bigint,text,text,numeric,integer,boolean,numeric) to authenticated;
 grant execute on function public.retirar_plan_adicional_reserva(bigint) to authenticated;
+
+-- Corrige reservas que ya tenían un almuerzo agregado antes de esta mejora.
+-- Solo actualiza la bandera de almuerzo; NO modifica el CH/código operativo.
+update public.reserva r
+set incluye_almuerzo = true
+where coalesce(r.incluye_almuerzo, false) = false
+  and exists (
+    select 1
+    from public.reserva_plan_adicional rpa
+    where rpa.id_reserva = r.id_reserva
+      and rpa.activo = true
+      and lower(coalesce(rpa.nombre, '')) like '%almuerzo%'
+  );
