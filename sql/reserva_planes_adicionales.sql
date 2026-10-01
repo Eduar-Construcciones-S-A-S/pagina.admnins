@@ -172,6 +172,15 @@ begin
   set valor_total = v_nuevo_total
   where id_reserva = p_id_reserva;
 
+  -- Un almuerzo agregado posteriormente ya fue aprobado/pagado:
+  -- se marca la reserva con almuerzo, pero NO se reasigna ni cambia
+  -- el CH/codigo operativo que ya tiene la reserva.
+  if lower(coalesce(p_nombre, '')) like '%almuerzo%' then
+    update public.reserva
+    set incluye_almuerzo = true
+    where id_reserva = p_id_reserva;
+  end if;
+
   return jsonb_build_object(
     'id_reserva_plan_adicional', v_id,
     'nuevo_total', v_nuevo_total
