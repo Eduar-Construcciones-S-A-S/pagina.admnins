@@ -381,7 +381,7 @@ export async function recordSnackInventoryVerification(args: {
   }
 
   const counted = args.coincide ? null : Math.floor(num(args.cantidad_contada));
-  if (!args.coincide && (!Number.isInteger(counted) || counted < 0)) {
+  if (!args.coincide && (counted == null || !Number.isInteger(counted) || counted < 0)) {
     throw new Error("Indica cuántas unidades hay actualmente.");
   }
   if (!args.coincide && !args.observacion?.trim()) {
