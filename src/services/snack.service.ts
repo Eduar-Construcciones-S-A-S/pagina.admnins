@@ -142,6 +142,15 @@ export type ReservationSnackSaleResult = {
   observacion: string;
 };
 
+export type ReservationSnackSaleCancellationResult = {
+  id_venta: number;
+  total_retirado: number;
+  nuevo_total: number;
+  saldo_pendiente: number;
+  exceso_pagado: number;
+  observacion: string;
+};
+
 export type SnackTransfer = {
   id_transferencia: number;
   id_producto: number;
@@ -721,6 +730,57 @@ export async function registerSnackSale(
   return data;
 }
 
+export async function getSnackSalesForReservation(idReserva: number): Promise<SnackSale[]> {
+  const id = Number(idReserva);
+  if (!Number.isInteger(id) || id <= 0) return [];
+
+  const { data: salesData, error: salesError } = await client()
+    .from("snack_venta")
+    .select("id_venta,fecha_venta,medio_pago,total,vendedor_user_id,vendedor_email,ubicacion_codigo")
+    .eq("id_reserva", id)
+    .order("fecha_venta", { ascending: false });
+  if (salesError) throw salesError;
+
+  const sales = salesData ?? [];
+  const ids = sales.map((row: any) => Number(row.id_venta));
+  if (!ids.length) return [];
+
+  const { data: detailData, error: detailError } = await client()
+    .from("snack_venta_detalle")
+    .select("id_detalle,id_venta,id_producto,numero_producto,nombre_producto,cantidad,precio_unitario,subtotal")
+    .in("id_venta", ids)
+    .order("id_detalle", { ascending: true });
+  if (detailError) throw detailError;
+
+  const grouped = new Map<number, SnackSaleItem[]>();
+  for (const row of detailData ?? []) {
+    const item: SnackSaleItem = {
+      id_detalle: Number((row as any).id_detalle),
+      id_venta: Number((row as any).id_venta),
+      id_producto: (row as any).id_producto == null ? null : Number((row as any).id_producto),
+      numero_producto: String((row as any).numero_producto ?? ""),
+      nombre_producto: String((row as any).nombre_producto ?? ""),
+      cantidad: num((row as any).cantidad),
+      precio_unitario: num((row as any).precio_unitario),
+      subtotal: num((row as any).subtotal),
+    };
+    const list = grouped.get(item.id_venta) ?? [];
+    list.push(item);
+    grouped.set(item.id_venta, list);
+  }
+
+  return sales.map((row: any) => ({
+    id_venta: Number(row.id_venta),
+    fecha_venta: String(row.fecha_venta),
+    medio_pago: String(row.medio_pago ?? ""),
+    total: num(row.total),
+    vendedor_user_id: row.vendedor_user_id ? String(row.vendedor_user_id) : null,
+    vendedor_email: String(row.vendedor_email ?? ""),
+    ubicacion_codigo: String(row.ubicacion_codigo || "taquilla_1") as SnackLocationCode,
+    items: grouped.get(Number(row.id_venta)) ?? [],
+  }));
+}
+
 export async function registerSnackSaleForReservation(
   idReserva: number,
   items: SnackSaleInput[],
@@ -776,3 +836,44 @@ export async function registerSnackSaleForReservation(
   }));
   return result;
 }
+
+export async function cancelSnackSaleForReservation(
+  idReserva: number,
+  idVenta: number,
+  motivo = "Cliente desistió de la compra",
+): Promise<ReservationSnackSaleCancellationResult> {
+  const current = await getCurrentRole();
+  if (!current || !["administrador", "atencion"].includes(current.role)) {
+    throw new Error("Solo Administración o Atención pueden retirar una venta de snacks de una reserva.");
+  }
+
+  const { data, error } = await client().rpc("anular_venta_snack_reserva", {
+    p_id_reserva: Number(idReserva),
+    p_id_venta: Number(idVenta),
+    p_motivo: motivo.trim() || "Cliente desistió de la compra",
+  });
+  if (error) throw error;
+
+  const raw: any = data ?? {};
+  const result: ReservationSnackSaleCancellationResult = {
+    id_venta: Number(raw.id_venta ?? idVenta),
+    total_retirado: num(raw.total_retirado),
+    nuevo_total: num(raw.nuevo_total),
+    saldo_pendiente: num(raw.saldo_pendiente),
+    exceso_pagado: num(raw.exceso_pagado),
+    observacion: String(raw.observacion ?? ""),
+  };
+
+  window.dispatchEvent(new CustomEvent("snack-sale-recorded"));
+  window.dispatchEvent(new CustomEvent("snack-stock-changed"));
+  window.dispatchEvent(new CustomEvent("control-operativo-reserva-updated", {
+    detail: {
+      id_reserva: Number(idReserva),
+      total: result.nuevo_total,
+      saldo_pendiente: result.saldo_pendiente,
+      observacion: result.observacion,
+    },
+  }));
+  return result;
+}
+
