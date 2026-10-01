@@ -132,6 +132,16 @@ export type SnackSaleInput = {
   cantidad: number;
 };
 
+export type ReservationSnackSaleResult = {
+  id_venta: number;
+  total: number;
+  nuevo_total: number;
+  saldo_pendiente: number;
+  medio_pago: string;
+  ubicacion: SnackLocationCode;
+  observacion: string;
+};
+
 export type SnackTransfer = {
   id_transferencia: number;
   id_producto: number;
@@ -709,4 +719,60 @@ export async function registerSnackSale(
   window.dispatchEvent(new CustomEvent("snack-sale-recorded"));
   window.dispatchEvent(new CustomEvent("snack-stock-changed"));
   return data;
+}
+
+export async function registerSnackSaleForReservation(
+  idReserva: number,
+  items: SnackSaleInput[],
+  medioPago: string,
+  ubicacion: SnackLocationCode = "taquilla_1",
+): Promise<ReservationSnackSaleResult> {
+  const current = await getCurrentRole();
+  if (!current || !["administrador", "atencion"].includes(current.role)) {
+    throw new Error("Solo Administración o Atención pueden vincular una venta de snacks a una reserva.");
+  }
+
+  const cleanItems = items
+    .map((item) => ({
+      id_producto: Number(item.id_producto),
+      cantidad: Math.floor(num(item.cantidad)),
+    }))
+    .filter((item) => item.id_producto > 0 && item.cantidad > 0);
+
+  if (!Number.isInteger(Number(idReserva)) || Number(idReserva) <= 0) {
+    throw new Error("No fue posible identificar la reserva.");
+  }
+  if (!cleanItems.length) throw new Error("Agrega al menos un producto a la venta.");
+  if (!medioPago.trim()) throw new Error("Selecciona el método de pago.");
+
+  const { data, error } = await client().rpc("registrar_venta_snack_reserva", {
+    p_id_reserva: Number(idReserva),
+    p_items: cleanItems,
+    p_medio_pago: medioPago.trim(),
+    p_ubicacion: ubicacion,
+  });
+  if (error) throw error;
+
+  const raw: any = data ?? {};
+  const result: ReservationSnackSaleResult = {
+    id_venta: Number(raw.id_venta ?? 0),
+    total: num(raw.total),
+    nuevo_total: num(raw.nuevo_total),
+    saldo_pendiente: num(raw.saldo_pendiente),
+    medio_pago: String(raw.medio_pago ?? medioPago),
+    ubicacion: String(raw.ubicacion ?? ubicacion) as SnackLocationCode,
+    observacion: String(raw.observacion ?? ""),
+  };
+
+  window.dispatchEvent(new CustomEvent("snack-sale-recorded"));
+  window.dispatchEvent(new CustomEvent("snack-stock-changed"));
+  window.dispatchEvent(new CustomEvent("control-operativo-reserva-updated", {
+    detail: {
+      id_reserva: Number(idReserva),
+      total: result.nuevo_total,
+      saldo_pendiente: result.saldo_pendiente,
+      observacion: result.observacion,
+    },
+  }));
+  return result;
 }
