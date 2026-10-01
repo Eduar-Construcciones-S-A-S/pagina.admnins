@@ -20,11 +20,14 @@ import {
 } from "../../services/reservaPlanAdicional.service";
 import { getMetodosPagoActivos } from "../../services/medioPago.service";
 import {
+  cancelSnackSaleForReservation,
   getSnackProducts,
+  getSnackSalesForReservation,
   registerSnackSaleForReservation,
   snackLocationLabel,
   type SnackLocationCode,
   type SnackProduct,
+  type SnackSale,
 } from "../../services/snack.service";
 import "../../styles/control-operativo-advanced.css";
 
@@ -145,7 +148,9 @@ export default function ControlOperativoAdvancedOptions() {
   const [snackPayment, setSnackPayment] = useState("");
   const [snackMethods, setSnackMethods] = useState<string[]>([]);
   const [snackSearch, setSnackSearch] = useState("");
+  const [snackReservationSales, setSnackReservationSales] = useState<SnackSale[]>([]);
   const [loadingSnacks, setLoadingSnacks] = useState(false);
+  const [loadingSnackSales, setLoadingSnackSales] = useState(false);
   const [loadingReserva, setLoadingReserva] = useState(false);
   const [loadingPlanesAdicionales, setLoadingPlanesAdicionales] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -194,6 +199,7 @@ export default function ControlOperativoAdvancedOptions() {
         setSnackPayment("");
         setSnackMethods([]);
         setSnackSearch("");
+        setSnackReservationSales([]);
         setError("");
         setSuccess("");
         return;
@@ -377,7 +383,23 @@ export default function ControlOperativoAdvancedOptions() {
     return () => { active = false; };
   }, [selected, snackLocation]);
 
-  const filteredSnackProducts = useMemo(() => {
+  useEffect(() => {
+    if (selected !== "ventas_snacks" || !reserva) {
+      setSnackReservationSales([]);
+      return;
+    }
+
+    let active = true;
+    setLoadingSnackSales(true);
+    getSnackSalesForReservation(reserva.id_reserva)
+      .then((sales) => active && setSnackReservationSales(sales))
+      .catch((e: any) => active && setError(e?.message || "No fue posible cargar las ventas de snacks vinculadas a la reserva."))
+      .finally(() => active && setLoadingSnackSales(false));
+
+    return () => { active = false; };
+  }, [selected, reserva?.id_reserva]);
+
+    const filteredSnackProducts = useMemo(() => {
     const query = snackSearch.trim().toLowerCase();
     return snackProducts.filter((product) =>
       !query || [product.numero_producto, product.nombre_producto].some((value) => value.toLowerCase().includes(query)),
@@ -573,8 +595,12 @@ export default function ControlOperativoAdvancedOptions() {
       if (totalInput) setReactInputValue(totalInput, result.nuevo_total);
 
       setSnackCart({});
-      const refreshedProducts = await getSnackProducts(false, snackLocation);
+      const [refreshedProducts, refreshedSales] = await Promise.all([
+        getSnackProducts(false, snackLocation),
+        getSnackSalesForReservation(reserva.id_reserva),
+      ]);
       setSnackProducts(refreshedProducts);
+      setSnackReservationSales(refreshedSales);
       setSuccess(
         `Venta de snacks registrada por ${money(result.total)}. Nuevo total de la reserva: ${money(result.nuevo_total)} · Saldo pendiente: ${money(result.saldo_pendiente)}.`,
       );
@@ -585,7 +611,51 @@ export default function ControlOperativoAdvancedOptions() {
     }
   };
 
-    const saveTotal = async () => {
+  const removeSnackSale = async (sale: SnackSale) => {
+    if (!modal || !reserva) return;
+    const detalle = sale.items.map((item) => `${item.cantidad}× ${item.nombre_producto}`).join(", ");
+    if (!window.confirm(
+      `¿Quitar la venta de snacks #${sale.id_venta} por ${money(sale.total)}?\n\n${detalle}\n\nLos productos volverán al inventario y el valor se descontará de la reserva.`,
+    )) return;
+
+    setSaving(true);
+    setError("");
+    setSuccess("");
+    try {
+      const result = await cancelSnackSaleForReservation(
+        reserva.id_reserva,
+        sale.id_venta,
+        "Cliente desistió de la compra",
+      );
+
+      setReserva({
+        ...reserva,
+        total: result.nuevo_total,
+        observacion: result.observacion || reserva.observacion,
+      });
+      const totalInput = getBaseTotalInput(modal);
+      if (totalInput) setReactInputValue(totalInput, result.nuevo_total);
+
+      const [refreshedProducts, refreshedSales] = await Promise.all([
+        getSnackProducts(false, snackLocation),
+        getSnackSalesForReservation(reserva.id_reserva),
+      ]);
+      setSnackProducts(refreshedProducts);
+      setSnackReservationSales(refreshedSales);
+
+      setSuccess(
+        result.exceso_pagado > 0
+          ? `Venta #${sale.id_venta} retirada. Se descontaron ${money(result.total_retirado)} y los productos volvieron al inventario. Quedó ${money(result.exceso_pagado)} a favor del cliente para gestionar como devolución.`
+          : `Venta #${sale.id_venta} retirada. Se descontaron ${money(result.total_retirado)} de la reserva, se restauró el inventario y el nuevo saldo pendiente es ${money(result.saldo_pendiente)}.`,
+      );
+    } catch (e: any) {
+      setError(e?.message || "No fue posible retirar la venta de snacks de esta reserva.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+      const saveTotal = async () => {
     if (role !== "administrador" || !reserva) return;
     const total = Number(String(nuevoTotal).replace(/[^0-9.]/g, ""));
     if (!Number.isFinite(total) || total <= 0) {
@@ -832,6 +902,42 @@ export default function ControlOperativoAdvancedOptions() {
                 <button type="button" className="op-btn primary" disabled={saving || !snackCartItems.length || !snackPayment} onClick={saveSnackSale}>
                   {saving ? "Registrando venta…" : `Registrar venta · ${money(snackTotal)}`}
                 </button>
+              </div>
+
+              <div className="op-snack-linked-sales">
+                <div className="op-plan-additional-current-head">
+                  <strong>Ventas vinculadas a esta reserva</strong>
+                  <small>Si el cliente se arrepiente, puedes retirar la venta. El stock vuelve al punto de venta y el total de la reserva se corrige.</small>
+                </div>
+
+                {loadingSnackSales ? (
+                  <div className="op-advanced-loading">Cargando ventas vinculadas…</div>
+                ) : snackReservationSales.length === 0 ? (
+                  <div className="op-plan-additional-empty">Esta reserva todavía no tiene ventas de snacks vinculadas.</div>
+                ) : (
+                  <div className="op-snack-linked-list">
+                    {snackReservationSales.map((sale) => (
+                      <div className="op-snack-linked-row" key={sale.id_venta}>
+                        <div>
+                          <strong>Venta #{sale.id_venta} · {money(sale.total)}</strong>
+                          <small>
+                            {sale.items.map((item) => `${item.cantidad}× ${item.nombre_producto}`).join(" · ")}
+                          </small>
+                          <small>{sale.medio_pago} · {snackLocationLabel(sale.ubicacion_codigo)}</small>
+                        </div>
+                        <button
+                          type="button"
+                          title="Quitar venta de snacks"
+                          aria-label={`Quitar venta de snacks #${sale.id_venta}`}
+                          disabled={saving}
+                          onClick={() => removeSnackSale(sale)}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </>
           ) : (
