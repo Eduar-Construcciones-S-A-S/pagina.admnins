@@ -475,7 +475,7 @@ export default function InventarioSnacksPage() {
         </>
       )}
 
-      {canVerifyInventory && (
+      {canViewVerification && (
         <section className="snack-card snack-verify-card">
           <div className="snack-card-title">
             <div><CheckCircle2 size={18} /><strong>Corroborar inventario</strong></div>
