@@ -499,6 +499,41 @@ export async function getSnackAdminDashboard(
   if (error) throw error;
 
   const raw: any = data ?? {};
+  let paymentMetrics = Array.isArray(raw.metodos_pago) ? raw.metodos_pago.map((row: any) => ({
+    medio_pago: String(row.medio_pago ?? ""),
+    ventas: num(row.ventas),
+    total: num(row.total),
+  })) : [];
+
+  let paymentQuery = client()
+    .from("snack_venta_pago")
+    .select("id_venta,medio_pago,monto,venta:snack_venta!inner(fecha_venta)");
+
+  if (fromDate) paymentQuery = paymentQuery.gte("venta.fecha_venta", `${fromDate}T00:00:00-05:00`);
+  if (toDate) paymentQuery = paymentQuery.lt("venta.fecha_venta", `${nextDate(toDate)}T00:00:00-05:00`);
+
+  const { data: splitPaymentData, error: splitPaymentError } = await paymentQuery;
+  if (!splitPaymentError) {
+    const methodMap = new Map<string, { ventas: Set<number>; total: number }>();
+    for (const row of splitPaymentData ?? []) {
+      const method = String((row as any).medio_pago ?? "");
+      if (!method) continue;
+      const current = methodMap.get(method) ?? { ventas: new Set<number>(), total: 0 };
+      current.ventas.add(Number((row as any).id_venta));
+      current.total += num((row as any).monto);
+      methodMap.set(method, current);
+    }
+    paymentMetrics = [...methodMap.entries()]
+      .map(([medio_pago, value]) => ({
+        medio_pago,
+        ventas: value.ventas.size,
+        total: value.total,
+      }))
+      .sort((a, b) => b.total - a.total);
+  } else if (!isMissingSalePaymentSchema(splitPaymentError)) {
+    console.warn("No fue posible desglosar los métodos de pago de snacks.", splitPaymentError);
+  }
+
   return {
     ventas: num(raw.ventas),
     ingresos: num(raw.ingresos),
@@ -527,11 +562,7 @@ export async function getSnackAdminDashboard(
       margen: num(row.margen),
       lineas_sin_costo: num(row.lineas_sin_costo),
     })) : [],
-    metodos_pago: Array.isArray(raw.metodos_pago) ? raw.metodos_pago.map((row: any) => ({
-      medio_pago: String(row.medio_pago ?? ""),
-      ventas: num(row.ventas),
-      total: num(row.total),
-    })) : [],
+    metodos_pago: paymentMetrics,
     ubicaciones: Array.isArray(raw.ubicaciones) ? raw.ubicaciones.map((row: any) => ({
       ubicacion_codigo: String(row.ubicacion_codigo ?? ""),
       ubicacion: String(row.ubicacion ?? snackLocationLabel(row.ubicacion_codigo)),
