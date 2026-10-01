@@ -100,7 +100,7 @@ export default function InventarioSnacksPage() {
 
   const isAdmin = role === "administrador";
   const canManageInventory = role === "administrador" || role === "coordinador";
-  const canVerifyInventory = role === "coordinador" || role === "guia";
+  const canViewVerification = role === "administrador" || role === "coordinador" || role === "guia";\n  const canVerifyInventory = role === "coordinador" || role === "guia";
 
   const load = useCallback(async (silent = false) => {
     silent ? setRefreshing(true) : setLoading(true);
@@ -483,7 +483,7 @@ export default function InventarioSnacksPage() {
               <option value="enclave">Enclave</option>
             </select>
           </div>
-          <p className="snack-admin-note">Compara el conteo físico con el sistema. Si coincide, solo confirma. Si encuentras más o menos unidades, reporta la cantidad actual y escribe obligatoriamente qué ocurrió. Esta corroboración no modifica el stock automáticamente.</p>
+          <p className="snack-admin-note">{canVerifyInventory ? "Compara el conteo físico con el sistema. Si coincide, solo confirma. Si encuentras más o menos unidades, reporta la cantidad actual y escribe obligatoriamente qué ocurrió. Esta corroboración no modifica el stock automáticamente." : "Aquí puedes revisar la última corroboración realizada por Coordinación o Guías. Las diferencias quedan visibles para que Administración pueda revisar y ajustar el inventario cuando corresponda."}</p>
 
           <div className="snack-verify-list">
             {loading ? <div className="snack-empty">Cargando inventario…</div> : verificationRows.length === 0 ? <div className="snack-empty">No hay productos activos en {locationLabel(verifyLocation)}.</div> : verificationRows.map((row) => (
@@ -501,11 +501,11 @@ export default function InventarioSnacksPage() {
                   <strong>{dateLabel(row.ultima_verificacion_fecha)}</strong>
                   {row.ultima_verificacion_fecha && <small>Conteo: {row.ultima_cantidad_contada ?? row.ultima_cantidad_sistema ?? 0}{row.ultima_coincide === false ? " · Diferencia reportada" : " · Confirmado"}</small>}
                 </div>
-                <div className="snack-verify-actions">
+                {canVerifyInventory && <div className="snack-verify-actions">
                   <button className="snack-btn secondary" disabled={verificationSaving === row.id_producto} onClick={() => confirmVerification(row)}><CheckCircle2 size={15} /> Confirmar</button>
                   <button className="snack-btn warning-btn" disabled={verificationSaving === row.id_producto} onClick={() => { setDifferenceProduct(row.id_producto); setDifferenceQty(""); setDifferenceNote(""); }}><AlertTriangle size={15} /> Hay diferencia</button>
-                </div>
-                {differenceProduct === row.id_producto && (
+                </div>}
+                {canVerifyInventory && differenceProduct === row.id_producto && (
                   <div className="snack-difference-form">
                     <label>Cantidad actual encontrada *
                       <input type="number" min={0} step={1} value={differenceQty} onChange={(e) => setDifferenceQty(e.target.value)} placeholder="Ej. 3" />
