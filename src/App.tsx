@@ -22,6 +22,7 @@ import SalesAccessRoute from "./components/SalesAccessRoute";
 import ProtectedRoute from "./components/ProtectedRoute";
 import RoleRoute from "./components/RoleRoute";
 import GlobalAlertModal from "./components/common/GlobalAlertModal";
+import SnackExpiryAlertWatcher from "./components/common/SnackExpiryAlertWatcher";
 import ControlOperativoAdvancedOptions from "./components/admin/ControlOperativoAdvancedOptions";
 import ControlOperativoReprogramPenalty from "./components/admin/ControlOperativoReprogramPenalty";
 import ControlOperativoMealSelector from "./components/admin/ControlOperativoMealSelector";
@@ -34,6 +35,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <GlobalAlertModal />
+      <SnackExpiryAlertWatcher />
       <ControlOperativoAdvancedOptions />
       <ControlOperativoReprogramPenalty />
       <ControlOperativoMealSelector />
