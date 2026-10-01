@@ -42,3 +42,15 @@
 .op-snack-cart-line b{color:#28704b}
 .op-snack-cart>small{display:block;margin-top:9px;padding-top:8px;border-top:1px dashed #d4e2d8;color:#6f7d74;font-size:9px;line-height:1.45}
 @media(max-width:720px){.op-snack-financial-summary,.op-snack-sale-controls{grid-template-columns:1fr}.op-snack-sale-controls label.wide{grid-column:1}.op-snack-product-row{grid-template-columns:minmax(0,1fr) auto}.op-snack-product-row>b{grid-column:2;text-align:center}.op-snack-product-list{max-height:360px}}
+
+
+/* Ventas de snacks ya vinculadas a una reserva */
+.op-snack-linked-sales{margin-top:15px;padding-top:12px;border-top:1px solid #dfe9e2}
+.op-snack-linked-list{display:flex;flex-direction:column;gap:7px}
+.op-snack-linked-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 11px;border:1px solid #dfe8e1;border-radius:10px;background:#fbfdfb}
+.op-snack-linked-row>div{min-width:0}
+.op-snack-linked-row strong{display:block;font-size:11px;color:#334139}
+.op-snack-linked-row small{display:block;margin-top:3px;font-size:9px;line-height:1.4;color:#7c877f;overflow-wrap:anywhere}
+.op-snack-linked-row>button{width:34px;height:34px;display:grid;place-items:center;border:1px solid #efcbc3;border-radius:8px;background:#fff6f4;color:#a94f40;cursor:pointer}
+.op-snack-linked-row>button:hover:not(:disabled){background:#ffebe7;border-color:#e5aa9e}
+.op-snack-linked-row>button:disabled{opacity:.45;cursor:not-allowed}
