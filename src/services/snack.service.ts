@@ -152,6 +152,16 @@ export type ReservationSnackSaleCancellationResult = {
   observacion: string;
 };
 
+export type SnackSaleDeletionResult = {
+  id_venta: number;
+  total_eliminado: number;
+  ubicacion: SnackLocationCode;
+  id_reserva: number | null;
+  nuevo_total: number | null;
+  saldo_pendiente: number | null;
+  observacion: string;
+};
+
 export type SnackTransfer = {
   id_transferencia: number;
   id_producto: number;
@@ -862,6 +872,50 @@ export async function registerSnackSaleForReservation(
       observacion: result.observacion,
     },
   }));
+  return result;
+}
+
+export async function deleteSnackSaleAdmin(
+  idVenta: number,
+): Promise<SnackSaleDeletionResult> {
+  await requireAdmin();
+
+  const saleId = Number(idVenta);
+  if (!Number.isInteger(saleId) || saleId <= 0) {
+    throw new Error("No fue posible identificar la venta.");
+  }
+
+  const { data, error } = await client().rpc("admin_eliminar_venta_snack", {
+    p_id_venta: saleId,
+  });
+  if (error) throw error;
+
+  const raw: any = data ?? {};
+  const idReserva = raw.id_reserva == null ? null : Number(raw.id_reserva);
+  const result: SnackSaleDeletionResult = {
+    id_venta: Number(raw.id_venta ?? saleId),
+    total_eliminado: num(raw.total_eliminado),
+    ubicacion: String(raw.ubicacion ?? "taquilla_1") as SnackLocationCode,
+    id_reserva: Number.isInteger(idReserva) && Number(idReserva) > 0 ? Number(idReserva) : null,
+    nuevo_total: raw.nuevo_total == null ? null : num(raw.nuevo_total),
+    saldo_pendiente: raw.saldo_pendiente == null ? null : num(raw.saldo_pendiente),
+    observacion: String(raw.observacion ?? ""),
+  };
+
+  window.dispatchEvent(new CustomEvent("snack-sale-recorded"));
+  window.dispatchEvent(new CustomEvent("snack-stock-changed"));
+
+  if (result.id_reserva) {
+    window.dispatchEvent(new CustomEvent("control-operativo-reserva-updated", {
+      detail: {
+        id_reserva: result.id_reserva,
+        total: result.nuevo_total,
+        saldo_pendiente: result.saldo_pendiente,
+        observacion: result.observacion,
+      },
+    }));
+  }
+
   return result;
 }
 
