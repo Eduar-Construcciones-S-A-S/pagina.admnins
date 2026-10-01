@@ -116,6 +116,14 @@ export type SnackSaleItem = {
   subtotal: number;
 };
 
+export type SnackSalePayment = {
+  id_pago: number | null;
+  id_venta: number;
+  medio_pago: string;
+  monto: number;
+  referencia_pago: string;
+};
+
 export type SnackSale = {
   id_venta: number;
   fecha_venta: string;
@@ -126,11 +134,18 @@ export type SnackSale = {
   vendedor_email: string;
   ubicacion_codigo: SnackLocationCode;
   items: SnackSaleItem[];
+  pagos: SnackSalePayment[];
 };
 
 export type SnackSaleInput = {
   id_producto: number;
   cantidad: number;
+};
+
+export type SnackSalePaymentInput = {
+  monto: number;
+  medio_pago: string;
+  referencia_pago?: string;
 };
 
 export type ReservationSnackSaleResult = {
@@ -184,6 +199,16 @@ const isMissingLocationSchema = (error: any) =>
   error?.code === "42P01" ||
   error?.code === "PGRST205" ||
   String(error?.message || "").includes("snack_inventario_ubicacion");
+
+const isMissingSalePaymentSchema = (error: any) =>
+  error?.code === "42P01" ||
+  error?.code === "PGRST205" ||
+  String(error?.message || "").includes("snack_venta_pago");
+
+const isMissingMultiPaymentRpc = (error: any) =>
+  error?.code === "PGRST202" ||
+  error?.code === "42883" ||
+  String(error?.message || "").includes("registrar_venta_snack_multi_pago");
 
 async function requireAdmin() {
   const current = await getCurrentRole();
@@ -675,12 +700,23 @@ export async function getSnackSalesByDate(
   const ids = sales.map((row: any) => Number(row.id_venta));
   if (!ids.length) return [];
 
-  const { data: detailData, error: detailError } = await client()
-    .from("snack_venta_detalle")
-    .select("id_detalle,id_venta,id_producto,numero_producto,nombre_producto,cantidad,precio_unitario,subtotal")
-    .in("id_venta", ids)
-    .order("id_detalle", { ascending: true });
+  const [
+    { data: detailData, error: detailError },
+    { data: paymentData, error: paymentError },
+  ] = await Promise.all([
+    client()
+      .from("snack_venta_detalle")
+      .select("id_detalle,id_venta,id_producto,numero_producto,nombre_producto,cantidad,precio_unitario,subtotal")
+      .in("id_venta", ids)
+      .order("id_detalle", { ascending: true }),
+    client()
+      .from("snack_venta_pago")
+      .select("id_pago,id_venta,medio_pago,monto,referencia_pago")
+      .in("id_venta", ids)
+      .order("id_pago", { ascending: true }),
+  ]);
   if (detailError) throw detailError;
+  if (paymentError && !isMissingSalePaymentSchema(paymentError)) throw paymentError;
 
   const grouped = new Map<number, SnackSaleItem[]>();
   for (const row of detailData ?? []) {
@@ -699,24 +735,49 @@ export async function getSnackSalesByDate(
     grouped.set(item.id_venta, list);
   }
 
-  return sales.map((row: any) => ({
-    id_venta: Number(row.id_venta),
-    fecha_venta: String(row.fecha_venta),
-    medio_pago: String(row.medio_pago ?? ""),
-    referencia_pago: String(row.referencia_pago ?? ""),
-    total: num(row.total),
-    vendedor_user_id: row.vendedor_user_id ? String(row.vendedor_user_id) : null,
-    vendedor_email: String(row.vendedor_email ?? ""),
-    ubicacion_codigo: String(row.ubicacion_codigo || "taquilla_1") as SnackLocationCode,
-    items: grouped.get(Number(row.id_venta)) ?? [],
-  }));
+  const payments = new Map<number, SnackSalePayment[]>();
+  for (const row of paymentData ?? []) {
+    const payment: SnackSalePayment = {
+      id_pago: Number((row as any).id_pago),
+      id_venta: Number((row as any).id_venta),
+      medio_pago: String((row as any).medio_pago ?? ""),
+      monto: num((row as any).monto),
+      referencia_pago: String((row as any).referencia_pago ?? ""),
+    };
+    const list = payments.get(payment.id_venta) ?? [];
+    list.push(payment);
+    payments.set(payment.id_venta, list);
+  }
+
+  return sales.map((row: any) => {
+    const idVenta = Number(row.id_venta);
+    const salePayments = payments.get(idVenta) ?? [{
+      id_pago: null,
+      id_venta: idVenta,
+      medio_pago: String(row.medio_pago ?? ""),
+      monto: num(row.total),
+      referencia_pago: String(row.referencia_pago ?? ""),
+    }];
+
+    return {
+      id_venta: idVenta,
+      fecha_venta: String(row.fecha_venta),
+      medio_pago: String(row.medio_pago ?? ""),
+      referencia_pago: String(row.referencia_pago ?? ""),
+      total: num(row.total),
+      vendedor_user_id: row.vendedor_user_id ? String(row.vendedor_user_id) : null,
+      vendedor_email: String(row.vendedor_email ?? ""),
+      ubicacion_codigo: String(row.ubicacion_codigo || "taquilla_1") as SnackLocationCode,
+      items: grouped.get(idVenta) ?? [],
+      pagos: salePayments,
+    };
+  });
 }
 
 export async function registerSnackSale(
   items: SnackSaleInput[],
-  medioPago: string,
+  pagos: SnackSalePaymentInput[],
   ubicacion: SnackLocationCode = "taquilla_1",
-  referenciaPago = "",
 ) {
   const current = await getCurrentRole();
   if (!current) throw new Error("No fue posible identificar el usuario que registra la venta.");
@@ -727,21 +788,49 @@ export async function registerSnackSale(
       cantidad: Math.floor(num(item.cantidad)),
     }))
     .filter((item) => item.id_producto > 0 && item.cantidad > 0);
-  const cleanReference = referenciaPago.replace(/\D/g, "").slice(0, 4);
+
+  const cleanPayments = pagos
+    .map((payment) => ({
+      monto: Math.round(num(payment.monto) * 100) / 100,
+      medio_pago: String(payment.medio_pago ?? "").trim(),
+      referencia_pago: String(payment.referencia_pago ?? "").replace(/\D/g, "").slice(0, 4),
+    }))
+    .filter((payment) => payment.monto > 0 || payment.medio_pago || payment.referencia_pago);
 
   if (!cleanItems.length) throw new Error("Agrega al menos un producto a la venta.");
-  if (!medioPago.trim()) throw new Error("Selecciona el método de pago.");
-  if (cleanReference && cleanReference.length !== 4) {
-    throw new Error("La referencia de pago debe tener los últimos 4 dígitos.");
+  if (!cleanPayments.length) throw new Error("Agrega al menos un método de pago.");
+
+  for (const payment of cleanPayments) {
+    if (payment.monto <= 0 || !payment.medio_pago) {
+      throw new Error("Cada método de pago debe tener un valor mayor a cero y un medio seleccionado.");
+    }
+    if (payment.referencia_pago && payment.referencia_pago.length !== 4) {
+      throw new Error("Cada referencia de pago debe tener exactamente los últimos 4 dígitos.");
+    }
   }
 
-  const { data, error } = await client().rpc("registrar_venta_snack", {
+  const { data, error } = await client().rpc("registrar_venta_snack_multi_pago", {
     p_items: cleanItems,
-    p_medio_pago: medioPago.trim(),
+    p_pagos: cleanPayments,
     p_ubicacion: ubicacion,
-    p_referencia_pago: cleanReference || null,
   });
-  if (error) throw error;
+
+  if (error) {
+    if (cleanPayments.length === 1 && isMissingMultiPaymentRpc(error)) {
+      const payment = cleanPayments[0];
+      const fallback = await client().rpc("registrar_venta_snack", {
+        p_items: cleanItems,
+        p_medio_pago: payment.medio_pago,
+        p_ubicacion: ubicacion,
+        p_referencia_pago: payment.referencia_pago || null,
+      });
+      if (fallback.error) throw fallback.error;
+      window.dispatchEvent(new CustomEvent("snack-sale-recorded"));
+      window.dispatchEvent(new CustomEvent("snack-stock-changed"));
+      return fallback.data;
+    }
+    throw error;
+  }
 
   window.dispatchEvent(new CustomEvent("snack-sale-recorded"));
   window.dispatchEvent(new CustomEvent("snack-stock-changed"));
@@ -751,16 +840,24 @@ export async function registerSnackSale(
 export async function updateSnackSalePaymentReference(
   idVenta: number,
   referenciaPago: string,
+  idPago?: number | null,
 ): Promise<string> {
   const cleanReference = referenciaPago.replace(/\D/g, "").slice(0, 4);
   if (cleanReference && cleanReference.length !== 4) {
     throw new Error("La referencia de pago debe tener exactamente 4 dígitos.");
   }
 
-  const { data, error } = await client().rpc("actualizar_referencia_pago_venta_snack", {
-    p_id_venta: Number(idVenta),
-    p_referencia_pago: cleanReference || null,
-  });
+  const request = idPago
+    ? client().rpc("actualizar_referencia_pago_venta_snack_pago", {
+        p_id_pago: Number(idPago),
+        p_referencia_pago: cleanReference || null,
+      })
+    : client().rpc("actualizar_referencia_pago_venta_snack", {
+        p_id_venta: Number(idVenta),
+        p_referencia_pago: cleanReference || null,
+      });
+
+  const { data, error } = await request;
   if (error) throw error;
 
   window.dispatchEvent(new CustomEvent("snack-sale-recorded"));
@@ -782,12 +879,23 @@ export async function getSnackSalesForReservation(idReserva: number): Promise<Sn
   const ids = sales.map((row: any) => Number(row.id_venta));
   if (!ids.length) return [];
 
-  const { data: detailData, error: detailError } = await client()
-    .from("snack_venta_detalle")
-    .select("id_detalle,id_venta,id_producto,numero_producto,nombre_producto,cantidad,precio_unitario,subtotal")
-    .in("id_venta", ids)
-    .order("id_detalle", { ascending: true });
+  const [
+    { data: detailData, error: detailError },
+    { data: paymentData, error: paymentError },
+  ] = await Promise.all([
+    client()
+      .from("snack_venta_detalle")
+      .select("id_detalle,id_venta,id_producto,numero_producto,nombre_producto,cantidad,precio_unitario,subtotal")
+      .in("id_venta", ids)
+      .order("id_detalle", { ascending: true }),
+    client()
+      .from("snack_venta_pago")
+      .select("id_pago,id_venta,medio_pago,monto,referencia_pago")
+      .in("id_venta", ids)
+      .order("id_pago", { ascending: true }),
+  ]);
   if (detailError) throw detailError;
+  if (paymentError && !isMissingSalePaymentSchema(paymentError)) throw paymentError;
 
   const grouped = new Map<number, SnackSaleItem[]>();
   for (const row of detailData ?? []) {
@@ -806,17 +914,43 @@ export async function getSnackSalesForReservation(idReserva: number): Promise<Sn
     grouped.set(item.id_venta, list);
   }
 
-  return sales.map((row: any) => ({
-    id_venta: Number(row.id_venta),
-    fecha_venta: String(row.fecha_venta),
-    medio_pago: String(row.medio_pago ?? ""),
-    referencia_pago: String(row.referencia_pago ?? ""),
-    total: num(row.total),
-    vendedor_user_id: row.vendedor_user_id ? String(row.vendedor_user_id) : null,
-    vendedor_email: String(row.vendedor_email ?? ""),
-    ubicacion_codigo: String(row.ubicacion_codigo || "taquilla_1") as SnackLocationCode,
-    items: grouped.get(Number(row.id_venta)) ?? [],
-  }));
+  const payments = new Map<number, SnackSalePayment[]>();
+  for (const row of paymentData ?? []) {
+    const payment: SnackSalePayment = {
+      id_pago: Number((row as any).id_pago),
+      id_venta: Number((row as any).id_venta),
+      medio_pago: String((row as any).medio_pago ?? ""),
+      monto: num((row as any).monto),
+      referencia_pago: String((row as any).referencia_pago ?? ""),
+    };
+    const list = payments.get(payment.id_venta) ?? [];
+    list.push(payment);
+    payments.set(payment.id_venta, list);
+  }
+
+  return sales.map((row: any) => {
+    const idVenta = Number(row.id_venta);
+    const salePayments = payments.get(idVenta) ?? [{
+      id_pago: null,
+      id_venta: idVenta,
+      medio_pago: String(row.medio_pago ?? ""),
+      monto: num(row.total),
+      referencia_pago: String(row.referencia_pago ?? ""),
+    }];
+
+    return {
+      id_venta: idVenta,
+      fecha_venta: String(row.fecha_venta),
+      medio_pago: String(row.medio_pago ?? ""),
+      referencia_pago: String(row.referencia_pago ?? ""),
+      total: num(row.total),
+      vendedor_user_id: row.vendedor_user_id ? String(row.vendedor_user_id) : null,
+      vendedor_email: String(row.vendedor_email ?? ""),
+      ubicacion_codigo: String(row.ubicacion_codigo || "taquilla_1") as SnackLocationCode,
+      items: grouped.get(idVenta) ?? [],
+      pagos: salePayments,
+    };
+  });
 }
 
 export async function registerSnackSaleForReservation(
