@@ -12,6 +12,8 @@ import {
   type SnackLocationCode,
   type SnackProduct,
   type SnackSale,
+  type SnackSalePayment,
+  type SnackSalePaymentInput,
 } from "../services/snack.service";
 import "../styles/snacks.css";
 
@@ -20,6 +22,10 @@ const todayBogota = () => new Date().toLocaleDateString("en-CA", { timeZone: "Am
 const timeBogota = (value: string) => new Date(value).toLocaleTimeString("es-CO", { timeZone: "America/Bogota", hour: "2-digit", minute: "2-digit" });
 
 type Cart = Record<number, number>;
+type PaymentSplit = SnackSalePaymentInput & { referencia_pago: string };
+
+const emptyPayment = (): PaymentSplit => ({ monto: 0, medio_pago: "", referencia_pago: "" });
+const paymentKey = (sale: SnackSale, payment: SnackSalePayment) => `${sale.id_venta}:${payment.id_pago ?? "legacy"}`;
 
 type Props = {
   ubicacion?: SnackLocationCode;
@@ -37,9 +43,8 @@ export default function VentasSnacksPage({
   const [metodos, setMetodos] = useState<string[]>([]);
   const [sales, setSales] = useState<SnackSale[]>([]);
   const [cart, setCart] = useState<Cart>({});
-  const [medioPago, setMedioPago] = useState("");
-  const [referenciaPago, setReferenciaPago] = useState("");
-  const [editingReferenceSaleId, setEditingReferenceSaleId] = useState<number | null>(null);
+  const [payments, setPayments] = useState<PaymentSplit[]>([emptyPayment()]);
+  const [editingReferenceKey, setEditingReferenceKey] = useState<string | null>(null);
   const [editingReference, setEditingReference] = useState("");
   const [savingReference, setSavingReference] = useState(false);
   const [deletingSaleId, setDeletingSaleId] = useState<number | null>(null);
@@ -73,7 +78,13 @@ export default function VentasSnacksPage({
         }
         return next;
       });
-      if (paymentData.length === 1) setMedioPago(paymentData[0]);
+      if (paymentData.length === 1) {
+        setPayments((current) =>
+          current.length === 1 && !current[0].medio_pago && current[0].monto === 0
+            ? [{ ...current[0], medio_pago: paymentData[0] }]
+            : current,
+        );
+      }
     } catch (e: any) {
       setError(e?.message || `No fue posible cargar las ventas de ${locationLabel}.`);
     } finally {
@@ -104,6 +115,8 @@ export default function VentasSnacksPage({
   const total = cartItems.reduce((sum, item) => sum + item.product.precio * item.cantidad, 0);
   const units = cartItems.reduce((sum, item) => sum + item.cantidad, 0);
   const totalToday = sales.reduce((sum, sale) => sum + sale.total, 0);
+  const assignedPayment = payments.reduce((sum, payment) => sum + Number(payment.monto || 0), 0);
+  const pendingPayment = total - assignedPayment;
 
   const setQuantity = (product: SnackProduct, quantity: number) => {
     const next = Math.max(0, Math.min(product.cantidad, Math.floor(quantity || 0)));
@@ -115,17 +128,53 @@ export default function VentasSnacksPage({
     });
   };
 
+  const updatePayment = (index: number, patch: Partial<PaymentSplit>) => {
+    setPayments((current) => current.map((payment, currentIndex) =>
+      currentIndex === index ? { ...payment, ...patch } : payment,
+    ));
+  };
+
+  const addPayment = () => {
+    setPayments((current) => [...current, emptyPayment()]);
+    setError("");
+  };
+
+  const removePayment = (index: number) => {
+    setPayments((current) => {
+      const next = current.filter((_, currentIndex) => currentIndex !== index);
+      return next.length ? next : [emptyPayment()];
+    });
+    setError("");
+  };
+
   const sell = async () => {
     if (!cartItems.length) {
       setError("Agrega al menos un producto a la venta.");
       return;
     }
-    if (!medioPago) {
-      setError("Selecciona el método de pago.");
+
+    const cleanPayments = payments.filter((payment) =>
+      Number(payment.monto || 0) > 0 || payment.medio_pago || payment.referencia_pago,
+    );
+
+    if (!cleanPayments.length) {
+      setError("Agrega al menos un método de pago.");
       return;
     }
-    if (referenciaPago && referenciaPago.length !== 4) {
-      setError("La referencia de pago es opcional, pero si la ingresas debe tener los últimos 4 dígitos.");
+
+    if (cleanPayments.some((payment) => Number(payment.monto || 0) <= 0 || !payment.medio_pago)) {
+      setError("Cada método de pago debe tener un valor mayor a cero y un medio seleccionado.");
+      return;
+    }
+
+    if (cleanPayments.some((payment) => payment.referencia_pago && payment.referencia_pago.length !== 4)) {
+      setError("La referencia es opcional, pero si la ingresas debe tener exactamente los últimos 4 dígitos.");
+      return;
+    }
+
+    const paymentTotal = cleanPayments.reduce((sum, payment) => sum + Number(payment.monto || 0), 0);
+    if (Math.abs(paymentTotal - total) > 0.009) {
+      setError(`Los métodos de pago suman ${money(paymentTotal)} y la venta vale ${money(total)}. Deben coincidir exactamente.`);
       return;
     }
 
@@ -135,13 +184,12 @@ export default function VentasSnacksPage({
     try {
       await registerSnackSale(
         cartItems.map(({ product, cantidad }) => ({ id_producto: product.id_producto, cantidad })),
-        medioPago,
+        cleanPayments,
         ubicacion,
-        referenciaPago,
       );
       setCart({});
-      setReferenciaPago("");
-      setSuccess(`Venta registrada por ${money(total)} en ${locationLabel}. El inventario de este punto fue descontado automáticamente.`);
+      setPayments([emptyPayment()]);
+      setSuccess(`Venta registrada por ${money(total)} en ${locationLabel} con ${cleanPayments.length} método${cleanPayments.length === 1 ? "" : "s"} de pago. El inventario fue descontado automáticamente.`);
       await load(true);
     } catch (e: any) {
       setError(e?.message || "No fue posible registrar la venta.");
@@ -150,14 +198,14 @@ export default function VentasSnacksPage({
     }
   };
 
-  const beginEditReference = (sale: SnackSale) => {
-    setEditingReferenceSaleId(sale.id_venta);
-    setEditingReference(sale.referencia_pago || "");
+  const beginEditReference = (sale: SnackSale, payment: SnackSalePayment) => {
+    setEditingReferenceKey(paymentKey(sale, payment));
+    setEditingReference(payment.referencia_pago || "");
     setError("");
     setSuccess("");
   };
 
-  const savePaymentReference = async (sale: SnackSale) => {
+  const savePaymentReference = async (sale: SnackSale, payment: SnackSalePayment) => {
     if (editingReference && editingReference.length !== 4) {
       setError("La referencia debe tener exactamente los últimos 4 dígitos, o quedar vacía si deseas quitarla.");
       return;
@@ -167,17 +215,29 @@ export default function VentasSnacksPage({
     setError("");
     setSuccess("");
     try {
-      const savedReference = await updateSnackSalePaymentReference(sale.id_venta, editingReference);
-      setSales((current) => current.map((item) =>
-        item.id_venta === sale.id_venta
-          ? { ...item, referencia_pago: savedReference }
-          : item,
-      ));
-      setEditingReferenceSaleId(null);
+      const savedReference = await updateSnackSalePaymentReference(
+        sale.id_venta,
+        editingReference,
+        payment.id_pago,
+      );
+      setSales((current) => current.map((item) => {
+        if (item.id_venta !== sale.id_venta) return item;
+        const nextPayments = item.pagos.map((currentPayment) =>
+          currentPayment.id_pago === payment.id_pago
+            ? { ...currentPayment, referencia_pago: savedReference }
+            : currentPayment,
+        );
+        return {
+          ...item,
+          pagos: nextPayments,
+          referencia_pago: nextPayments.length === 1 ? savedReference : item.referencia_pago,
+        };
+      }));
+      setEditingReferenceKey(null);
       setEditingReference("");
       setSuccess(savedReference
-        ? `Referencia •••• ${savedReference} guardada en la venta #${sale.id_venta}. El valor de la venta no fue modificado.`
-        : `Referencia de pago retirada de la venta #${sale.id_venta}. El valor de la venta no fue modificado.`);
+        ? `Referencia •••• ${savedReference} guardada para ${payment.medio_pago} en la venta #${sale.id_venta}. El valor no fue modificado.`
+        : `Referencia de ${payment.medio_pago} retirada de la venta #${sale.id_venta}. El valor no fue modificado.`);
     } catch (e: any) {
       setError(e?.message || "No fue posible actualizar la referencia de pago.");
     } finally {
@@ -201,7 +261,7 @@ export default function VentasSnacksPage({
     setSuccess("");
     try {
       const result = await deleteSnackSaleAdmin(sale.id_venta);
-      setEditingReferenceSaleId((current) => current === sale.id_venta ? null : current);
+      setEditingReferenceKey((current) => current?.startsWith(`${sale.id_venta}:`) ? null : current);
       setSales((current) => current.filter((item) => item.id_venta !== sale.id_venta));
       setSuccess(
         result.id_reserva
@@ -291,24 +351,73 @@ export default function VentasSnacksPage({
               </div>
             ))}
           </div>
+
           <div className="snack-cart-total"><span>Total</span><b>{money(total)}</b></div>
-          <label className="snack-payment-label">
-            Método de pago *
-            <select value={medioPago} onChange={(e) => setMedioPago(e.target.value)}>
-              <option value="">Seleccionar</option>
-              {metodos.map((method) => <option key={method} value={method}>{method}</option>)}
-            </select>
-          </label>
-          <label className="snack-payment-label">
-            Referencia de pago <span className="snack-optional-label">Opcional · últimos 4 dígitos</span>
-            <input
-              value={referenciaPago}
-              inputMode="numeric"
-              maxLength={4}
-              placeholder="Ej. 4821"
-              onChange={(e) => setReferenciaPago(e.target.value.replace(/\D/g, "").slice(0, 4))}
-            />
-          </label>
+
+          <div className="snack-split-payments">
+            <div className="snack-split-payments-head">
+              <div>
+                <strong>Métodos de pago</strong>
+                <small>Puedes dividir la venta entre varios medios.</small>
+              </div>
+              <button type="button" className="snack-btn secondary compact" onClick={addPayment}>
+                <Plus size={14} /> Añadir medio
+              </button>
+            </div>
+
+            {payments.map((payment, index) => (
+              <div className="snack-split-payment-row" key={index}>
+                <label>
+                  Valor *
+                  <input
+                    inputMode="numeric"
+                    value={payment.monto || ""}
+                    placeholder="0"
+                    onChange={(e) => updatePayment(index, { monto: Number(e.target.value.replace(/[^0-9]/g, "")) || 0 })}
+                  />
+                </label>
+                <label>
+                  Medio *
+                  <select
+                    value={payment.medio_pago}
+                    onChange={(e) => updatePayment(index, {
+                      medio_pago: e.target.value,
+                      monto: payments.length === 1 && payment.monto === 0 && total > 0 ? total : payment.monto,
+                    })}
+                  >
+                    <option value="">Seleccionar</option>
+                    {metodos.map((method) => <option key={method} value={method}>{method}</option>)}
+                  </select>
+                </label>
+                <label className="reference">
+                  Referencia <span>Opcional · 4 dígitos</span>
+                  <input
+                    value={payment.referencia_pago}
+                    inputMode="numeric"
+                    maxLength={4}
+                    placeholder="Ej. 4821"
+                    onChange={(e) => updatePayment(index, { referencia_pago: e.target.value.replace(/\D/g, "").slice(0, 4) })}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="snack-icon-btn"
+                  title="Quitar método"
+                  onClick={() => removePayment(index)}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+
+            <div className="snack-split-totals">
+              <span>Asignado <b>{money(assignedPayment)}</b></span>
+              <span className={Math.abs(pendingPayment) > 0.009 ? "pending" : "complete"}>
+                {pendingPayment >= 0 ? "Falta" : "Excede"} <b>{money(Math.abs(pendingPayment))}</b>
+              </span>
+            </div>
+          </div>
+
           <button className="snack-btn primary wide" disabled={saving || !cartItems.length} onClick={sell}>
             {saving ? "Registrando venta…" : `Cobrar ${money(total)}`}
           </button>
@@ -322,80 +431,98 @@ export default function VentasSnacksPage({
         </div>
         <div className="snack-table-wrap">
           <table className="snack-table">
-            <thead><tr><th>Hora</th><th>Productos</th><th>Método</th><th>Referencia</th><th>Vendedor</th><th>Total</th><th></th></tr></thead>
+            <thead><tr><th>Hora</th><th>Productos</th><th>Métodos de pago</th><th>Referencias</th><th>Vendedor</th><th>Total</th><th></th></tr></thead>
             <tbody>
               {sales.length === 0 ? (
                 <tr><td colSpan={7} className="snack-empty">Todavía no hay ventas de snacks hoy en {locationLabel}.</td></tr>
-              ) : sales.map((sale) => {
-                const editingReferenceNow = editingReferenceSaleId === sale.id_venta;
-                return (
-                  <tr key={sale.id_venta}>
-                    <td>{timeBogota(sale.fecha_venta)}</td>
-                    <td>{sale.items.map((item) => `${item.cantidad}× ${item.nombre_producto}`).join(", ")}</td>
-                    <td>{sale.medio_pago}</td>
-                    <td>
-                      {editingReferenceNow ? (
-                        <div className="snack-reference-editor">
-                          <input
-                            autoFocus
-                            value={editingReference}
-                            inputMode="numeric"
-                            maxLength={4}
-                            placeholder="4 dígitos"
-                            onChange={(e) => setEditingReference(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                          />
-                          <button
-                            className="snack-icon-btn"
-                            title="Guardar referencia"
-                            disabled={savingReference || Boolean(editingReference && editingReference.length !== 4)}
-                            onClick={() => savePaymentReference(sale)}
-                          >
-                            <Check size={14} />
-                          </button>
-                          <button
-                            className="snack-icon-btn"
-                            title="Cancelar"
-                            disabled={savingReference}
-                            onClick={() => { setEditingReferenceSaleId(null); setEditingReference(""); }}
-                          >
-                            <X size={14} />
-                          </button>
+              ) : sales.map((sale) => (
+                <tr key={sale.id_venta}>
+                  <td>{timeBogota(sale.fecha_venta)}</td>
+                  <td>{sale.items.map((item) => `${item.cantidad}× ${item.nombre_producto}`).join(", ")}</td>
+                  <td>
+                    <div className="snack-sale-payments">
+                      {sale.pagos.map((payment, index) => (
+                        <div key={payment.id_pago ?? index}>
+                          <strong>{payment.medio_pago}</strong>
+                          <span>{money(payment.monto)}</span>
                         </div>
-                      ) : sale.referencia_pago ? (
-                        <span className="snack-payment-reference">•••• {sale.referencia_pago}</span>
-                      ) : (
-                        <span className="snack-payment-reference empty">Sin referencia</span>
-                      )}
-                    </td>
-                    <td>{sale.vendedor_email || "—"}</td>
-                    <td><strong>{money(sale.total)}</strong></td>
-                    <td>
+                      ))}
+                    </div>
+                  </td>
+                  <td>
+                    <div className="snack-sale-references">
+                      {sale.pagos.map((payment, index) => {
+                        const key = paymentKey(sale, payment);
+                        const editingReferenceNow = editingReferenceKey === key;
+                        return (
+                          <div key={payment.id_pago ?? index}>
+                            {editingReferenceNow ? (
+                              <div className="snack-reference-editor">
+                                <input
+                                  autoFocus
+                                  value={editingReference}
+                                  inputMode="numeric"
+                                  maxLength={4}
+                                  placeholder="4 dígitos"
+                                  onChange={(e) => setEditingReference(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                                />
+                                <button
+                                  className="snack-icon-btn"
+                                  title="Guardar referencia"
+                                  disabled={savingReference || Boolean(editingReference && editingReference.length !== 4)}
+                                  onClick={() => savePaymentReference(sale, payment)}
+                                >
+                                  <Check size={14} />
+                                </button>
+                                <button
+                                  className="snack-icon-btn"
+                                  title="Cancelar"
+                                  disabled={savingReference}
+                                  onClick={() => { setEditingReferenceKey(null); setEditingReference(""); }}
+                                >
+                                  <X size={14} />
+                                </button>
+                              </div>
+                            ) : (
+                              <>
+                                {payment.referencia_pago ? (
+                                  <span className="snack-payment-reference">•••• {payment.referencia_pago}</span>
+                                ) : (
+                                  <span className="snack-payment-reference empty">Sin referencia</span>
+                                )}
+                                <button
+                                  className="snack-icon-btn"
+                                  title={`Editar referencia de ${payment.medio_pago}`}
+                                  onClick={() => beginEditReference(sale, payment)}
+                                >
+                                  <Pencil size={13} />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </td>
+                  <td>{sale.vendedor_email || "—"}</td>
+                  <td><strong>{money(sale.total)}</strong></td>
+                  <td>
+                    {isAdmin && (
                       <div className="snack-actions">
-                        {!editingReferenceNow && (
-                          <button
-                            className="snack-icon-btn"
-                            title="Editar únicamente la referencia de pago"
-                            onClick={() => beginEditReference(sale)}
-                          >
-                            <Pencil size={14} />
-                          </button>
-                        )}
-                        {isAdmin && (
-                          <button
-                            className="snack-icon-btn danger"
-                            title="Eliminar venta"
-                            aria-label={`Eliminar venta #${sale.id_venta}`}
-                            disabled={deletingSaleId === sale.id_venta}
-                            onClick={() => deleteSale(sale)}
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        )}
+                        <button
+                          className="snack-icon-btn danger"
+                          title="Eliminar venta"
+                          aria-label={`Eliminar venta #${sale.id_venta}`}
+                          disabled={deletingSaleId === sale.id_venta}
+                          onClick={() => deleteSale(sale)}
+                        >
+                          <Trash2 size={14} />
+                        </button>
                       </div>
-                    </td>
-                  </tr>
-                );
-              })}
+                    )}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
