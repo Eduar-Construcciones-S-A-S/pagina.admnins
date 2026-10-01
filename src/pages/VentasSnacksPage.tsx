@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, Minus, Pencil, Plus, RefreshCw, Search, ShoppingCart, Trash2, X } from "lucide-react";
 import { getMetodosPagoActivos } from "../services/medioPago.service";
+import { getCurrentRole } from "../services/role.service";
 import {
+  deleteSnackSaleAdmin,
   getSnackProducts,
   getSnackSalesByDate,
   registerSnackSale,
@@ -40,6 +42,8 @@ export default function VentasSnacksPage({
   const [editingReferenceSaleId, setEditingReferenceSaleId] = useState<number | null>(null);
   const [editingReference, setEditingReference] = useState("");
   const [savingReference, setSavingReference] = useState(false);
+  const [deletingSaleId, setDeletingSaleId] = useState<number | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -51,14 +55,16 @@ export default function VentasSnacksPage({
     silent ? setRefreshing(true) : setLoading(true);
     setError("");
     try {
-      const [productData, paymentData, saleData] = await Promise.all([
+      const [productData, paymentData, saleData, currentRole] = await Promise.all([
         getSnackProducts(false, ubicacion),
         getMetodosPagoActivos(),
         getSnackSalesByDate(todayBogota(), ubicacion),
+        getCurrentRole(),
       ]);
       setProducts(productData);
       setMetodos(paymentData);
       setSales(saleData);
+      setIsAdmin(currentRole?.role === "administrador");
       setCart((current) => {
         const next: Cart = {};
         for (const product of productData) {
@@ -176,6 +182,37 @@ export default function VentasSnacksPage({
       setError(e?.message || "No fue posible actualizar la referencia de pago.");
     } finally {
       setSavingReference(false);
+    }
+  };
+
+  const deleteSale = async (sale: SnackSale) => {
+    if (!isAdmin) return;
+
+    const productsLabel = sale.items
+      .map((item) => `${item.cantidad}× ${item.nombre_producto}`)
+      .join(", ");
+    const confirmed = window.confirm(
+      `¿Eliminar la venta #${sale.id_venta} por ${money(sale.total)}?\n\n${productsLabel}\n\nLas unidades volverán al inventario de ${snackLocationLabel(sale.ubicacion_codigo)}. Esta acción es exclusiva del administrador.`,
+    );
+    if (!confirmed) return;
+
+    setDeletingSaleId(sale.id_venta);
+    setError("");
+    setSuccess("");
+    try {
+      const result = await deleteSnackSaleAdmin(sale.id_venta);
+      setEditingReferenceSaleId((current) => current === sale.id_venta ? null : current);
+      setSales((current) => current.filter((item) => item.id_venta !== sale.id_venta));
+      setSuccess(
+        result.id_reserva
+          ? `Venta #${sale.id_venta} eliminada. Se devolvió el inventario y se corrigió el total de la reserva vinculada.`
+          : `Venta #${sale.id_venta} eliminada. Las unidades fueron devueltas al inventario de ${snackLocationLabel(result.ubicacion)}.`,
+      );
+      await load(true);
+    } catch (e: any) {
+      setError(e?.message || "No fue posible eliminar la venta.");
+    } finally {
+      setDeletingSaleId(null);
     }
   };
 
@@ -333,15 +370,28 @@ export default function VentasSnacksPage({
                     <td>{sale.vendedor_email || "—"}</td>
                     <td><strong>{money(sale.total)}</strong></td>
                     <td>
-                      {!editingReferenceNow && (
-                        <button
-                          className="snack-icon-btn"
-                          title="Editar únicamente la referencia de pago"
-                          onClick={() => beginEditReference(sale)}
-                        >
-                          <Pencil size={14} />
-                        </button>
-                      )}
+                      <div className="snack-actions">
+                        {!editingReferenceNow && (
+                          <button
+                            className="snack-icon-btn"
+                            title="Editar únicamente la referencia de pago"
+                            onClick={() => beginEditReference(sale)}
+                          >
+                            <Pencil size={14} />
+                          </button>
+                        )}
+                        {isAdmin && (
+                          <button
+                            className="snack-icon-btn danger"
+                            title="Eliminar venta"
+                            aria-label={`Eliminar venta #${sale.id_venta}`}
+                            disabled={deletingSaleId === sale.id_venta}
+                            onClick={() => deleteSale(sale)}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
