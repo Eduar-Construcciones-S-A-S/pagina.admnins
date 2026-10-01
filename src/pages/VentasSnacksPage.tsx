@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, Minus, Pencil, Plus, RefreshCw, Search, ShoppingCart, Trash2, X } from "lucide-react";
+import { Check, CreditCard, Info, Minus, Pencil, Plus, RefreshCw, Search, ShoppingCart, Trash2, X } from "lucide-react";
 import { getMetodosPagoActivos } from "../services/medioPago.service";
 import { getCurrentRole } from "../services/role.service";
 import {
@@ -334,16 +334,44 @@ export default function VentasSnacksPage({
         </section>
 
         <aside className="snack-card snack-cart-card">
-          <div className="snack-card-title">
-            <div><ShoppingCart size={18} /><strong>Venta actual · {locationLabel}</strong></div>
-            <span>{units} unidad{units === 1 ? "" : "es"}</span>
+          <div className="snack-cart-head">
+            <div className="snack-cart-heading">
+              <span className="snack-cart-icon"><ShoppingCart size={20} /></span>
+              <div>
+                <strong>Venta actual · {locationLabel}</strong>
+                <small>Productos agregados al carrito</small>
+              </div>
+            </div>
+            <div className="snack-unit-badge">
+              <b>{units}</b>
+              <span>unidad{units === 1 ? "" : "es"}</span>
+            </div>
           </div>
-          <div className="snack-cart-list">
+
+          <div className={`snack-cart-list ${cartItems.length === 0 ? "is-empty" : ""}`}>
             {cartItems.length === 0 ? (
-              <div className="snack-empty">Aún no has agregado productos.</div>
+              <div className="snack-cart-empty">
+                <span className="snack-cart-empty-icon"><ShoppingCart size={24} /></span>
+                <strong>Aún no has agregado productos.</strong>
+                <p>Busca y agrega los snacks que desea la persona.</p>
+                <button
+                  type="button"
+                  className="snack-empty-add-btn"
+                  onClick={() => {
+                    const input = document.querySelector<HTMLInputElement>(".snack-search input");
+                    input?.scrollIntoView({ behavior: "smooth", block: "center" });
+                    window.setTimeout(() => input?.focus(), 250);
+                  }}
+                >
+                  <Plus size={16} /> Agregar productos
+                </button>
+              </div>
             ) : cartItems.map(({ product, cantidad }) => (
               <div className="snack-cart-row" key={product.id_producto}>
-                <div><strong>{product.nombre_producto}</strong><small>{cantidad} × {money(product.precio)}</small></div>
+                <div>
+                  <strong>{product.nombre_producto}</strong>
+                  <small>{cantidad} × {money(product.precio)}</small>
+                </div>
                 <div>
                   <b>{money(product.precio * cantidad)}</b>
                   <button className="snack-icon-btn" onClick={() => setQuantity(product, 0)} title="Quitar"><Trash2 size={14} /></button>
@@ -352,73 +380,111 @@ export default function VentasSnacksPage({
             ))}
           </div>
 
-          <div className="snack-cart-total"><span>Total</span><b>{money(total)}</b></div>
+          <div className="snack-cart-total">
+            <div>
+              <span>Total de productos</span>
+              <small>Suma de todos los snacks en el carrito</small>
+            </div>
+            <b>{money(total)}</b>
+          </div>
 
           <div className="snack-split-payments">
             <div className="snack-split-payments-head">
               <div>
                 <strong>Métodos de pago</strong>
-                <small>Puedes dividir la venta entre varios medios.</small>
+                <small>Puedes dividir el pago de la venta entre varios medios.</small>
               </div>
               <button type="button" className="snack-btn secondary compact" onClick={addPayment}>
-                <Plus size={14} /> Añadir medio
+                <Plus size={15} /> Añadir método
               </button>
             </div>
 
-            {payments.map((payment, index) => (
-              <div className="snack-split-payment-row" key={index}>
-                <label>
-                  Valor *
-                  <input
-                    inputMode="numeric"
-                    value={payment.monto || ""}
-                    placeholder="0"
-                    onChange={(e) => updatePayment(index, { monto: Number(e.target.value.replace(/[^0-9]/g, "")) || 0 })}
-                  />
-                </label>
-                <label>
-                  Medio *
-                  <select
-                    value={payment.medio_pago}
-                    onChange={(e) => updatePayment(index, {
-                      medio_pago: e.target.value,
-                      monto: payments.length === 1 && payment.monto === 0 && total > 0 ? total : payment.monto,
-                    })}
+            <div className="snack-payment-cards">
+              {payments.map((payment, index) => (
+                <div className="snack-split-payment-row" key={index}>
+                  <span className="snack-payment-number" aria-hidden="true">{index + 1}</span>
+
+                  <label className="method">
+                    <span className="snack-field-title">Medio de pago <em>*</em></span>
+                    <select
+                      value={payment.medio_pago}
+                      onChange={(e) => updatePayment(index, {
+                        medio_pago: e.target.value,
+                        monto: payments.length === 1 && payment.monto === 0 && total > 0 ? total : payment.monto,
+                      })}
+                    >
+                      <option value="">Seleccionar</option>
+                      {metodos.map((method) => <option key={method} value={method}>{method}</option>)}
+                    </select>
+                  </label>
+
+                  <label className="amount">
+                    <span className="snack-field-title">Valor <em>*</em></span>
+                    <div className="snack-money-input">
+                      <span>$</span>
+                      <input
+                        inputMode="numeric"
+                        value={payment.monto || ""}
+                        placeholder="0"
+                        onChange={(e) => updatePayment(index, { monto: Number(e.target.value.replace(/[^0-9]/g, "")) || 0 })}
+                      />
+                    </div>
+                  </label>
+
+                  <label className="reference">
+                    <span className="snack-field-title">
+                      Referencia
+                      <span className="snack-reference-help" title="Últimos 4 dígitos de la referencia de pago"><Info size={12} /></span>
+                    </span>
+                    <small>4 dígitos · opcional</small>
+                    <input
+                      value={payment.referencia_pago}
+                      inputMode="numeric"
+                      maxLength={4}
+                      placeholder="Ej. 4821"
+                      onChange={(e) => updatePayment(index, { referencia_pago: e.target.value.replace(/\D/g, "").slice(0, 4) })}
+                    />
+                  </label>
+
+                  <button
+                    type="button"
+                    className="snack-payment-delete"
+                    title="Quitar método"
+                    aria-label={`Quitar método de pago ${index + 1}`}
+                    onClick={() => removePayment(index)}
                   >
-                    <option value="">Seleccionar</option>
-                    {metodos.map((method) => <option key={method} value={method}>{method}</option>)}
-                  </select>
-                </label>
-                <label className="reference">
-                  Referencia <span>Opcional · 4 dígitos</span>
-                  <input
-                    value={payment.referencia_pago}
-                    inputMode="numeric"
-                    maxLength={4}
-                    placeholder="Ej. 4821"
-                    onChange={(e) => updatePayment(index, { referencia_pago: e.target.value.replace(/\D/g, "").slice(0, 4) })}
-                  />
-                </label>
-                <button
-                  type="button"
-                  className="snack-icon-btn"
-                  title="Quitar método"
-                  onClick={() => removePayment(index)}
-                >
-                  <Trash2 size={14} />
-                </button>
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="snack-payment-info">
+              <Info size={18} />
+              <div>
+                <strong>La suma de los métodos de pago debe ser igual al total de la venta.</strong>
+                <span>Puedes usar uno o varios medios de pago.</span>
               </div>
-            ))}
+            </div>
 
             <div className="snack-split-totals">
-              <span>Asignado <b>{money(assignedPayment)}</b></span>
-              <span className={Math.abs(pendingPayment) > 0.009 ? "pending" : "complete"}>
-                {pendingPayment >= 0 ? "Falta" : "Excede"} <b>{money(Math.abs(pendingPayment))}</b>
-              </span>
+              <div>
+                <span>Asignado</span>
+                <b>{money(assignedPayment)}</b>
+              </div>
+              <div className={Math.abs(pendingPayment) > 0.009 ? "pending" : "complete"}>
+                <span>{pendingPayment >= 0 ? "Falta por asignar" : "Valor excedido"}</span>
+                <b>{money(Math.abs(pendingPayment))}</b>
+              </div>
             </div>
           </div>
 
-          <button className="snack-btn primary wide" disabled={saving || !cartItems.length} onClick={sell}>
+          <button
+            className="snack-btn primary wide snack-charge-btn"
+            disabled={saving || !cartItems.length || Math.abs(pendingPayment) > 0.009}
+            onClick={sell}
+          >
+            <CreditCard size={19} />
             {saving ? "Registrando venta…" : `Cobrar ${money(total)}`}
           </button>
         </aside>
