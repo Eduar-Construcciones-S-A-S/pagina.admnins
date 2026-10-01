@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Minus, Plus, RefreshCw, Search, ShoppingCart, Trash2 } from "lucide-react";
+import { Check, Minus, Pencil, Plus, RefreshCw, Search, ShoppingCart, Trash2, X } from "lucide-react";
 import { getMetodosPagoActivos } from "../services/medioPago.service";
 import {
   getSnackProducts,
   getSnackSalesByDate,
   registerSnackSale,
   snackLocationLabel,
+  updateSnackSalePaymentReference,
   type SnackLocationCode,
   type SnackProduct,
   type SnackSale,
@@ -35,6 +36,10 @@ export default function VentasSnacksPage({
   const [sales, setSales] = useState<SnackSale[]>([]);
   const [cart, setCart] = useState<Cart>({});
   const [medioPago, setMedioPago] = useState("");
+  const [referenciaPago, setReferenciaPago] = useState("");
+  const [editingReferenceSaleId, setEditingReferenceSaleId] = useState<number | null>(null);
+  const [editingReference, setEditingReference] = useState("");
+  const [savingReference, setSavingReference] = useState(false);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -113,6 +118,10 @@ export default function VentasSnacksPage({
       setError("Selecciona el método de pago.");
       return;
     }
+    if (referenciaPago && referenciaPago.length !== 4) {
+      setError("La referencia de pago es opcional, pero si la ingresas debe tener los últimos 4 dígitos.");
+      return;
+    }
 
     setSaving(true);
     setError("");
@@ -122,14 +131,51 @@ export default function VentasSnacksPage({
         cartItems.map(({ product, cantidad }) => ({ id_producto: product.id_producto, cantidad })),
         medioPago,
         ubicacion,
+        referenciaPago,
       );
       setCart({});
+      setReferenciaPago("");
       setSuccess(`Venta registrada por ${money(total)} en ${locationLabel}. El inventario de este punto fue descontado automáticamente.`);
       await load(true);
     } catch (e: any) {
       setError(e?.message || "No fue posible registrar la venta.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const beginEditReference = (sale: SnackSale) => {
+    setEditingReferenceSaleId(sale.id_venta);
+    setEditingReference(sale.referencia_pago || "");
+    setError("");
+    setSuccess("");
+  };
+
+  const savePaymentReference = async (sale: SnackSale) => {
+    if (editingReference && editingReference.length !== 4) {
+      setError("La referencia debe tener exactamente los últimos 4 dígitos, o quedar vacía si deseas quitarla.");
+      return;
+    }
+
+    setSavingReference(true);
+    setError("");
+    setSuccess("");
+    try {
+      const savedReference = await updateSnackSalePaymentReference(sale.id_venta, editingReference);
+      setSales((current) => current.map((item) =>
+        item.id_venta === sale.id_venta
+          ? { ...item, referencia_pago: savedReference }
+          : item,
+      ));
+      setEditingReferenceSaleId(null);
+      setEditingReference("");
+      setSuccess(savedReference
+        ? `Referencia •••• ${savedReference} guardada en la venta #${sale.id_venta}. El valor de la venta no fue modificado.`
+        : `Referencia de pago retirada de la venta #${sale.id_venta}. El valor de la venta no fue modificado.`);
+    } catch (e: any) {
+      setError(e?.message || "No fue posible actualizar la referencia de pago.");
+    } finally {
+      setSavingReference(false);
     }
   };
 
@@ -216,6 +262,16 @@ export default function VentasSnacksPage({
               {metodos.map((method) => <option key={method} value={method}>{method}</option>)}
             </select>
           </label>
+          <label className="snack-payment-label">
+            Referencia de pago <span className="snack-optional-label">Opcional · últimos 4 dígitos</span>
+            <input
+              value={referenciaPago}
+              inputMode="numeric"
+              maxLength={4}
+              placeholder="Ej. 4821"
+              onChange={(e) => setReferenciaPago(e.target.value.replace(/\D/g, "").slice(0, 4))}
+            />
+          </label>
           <button className="snack-btn primary wide" disabled={saving || !cartItems.length} onClick={sell}>
             {saving ? "Registrando venta…" : `Cobrar ${money(total)}`}
           </button>
@@ -229,19 +285,67 @@ export default function VentasSnacksPage({
         </div>
         <div className="snack-table-wrap">
           <table className="snack-table">
-            <thead><tr><th>Hora</th><th>Productos</th><th>Método</th><th>Vendedor</th><th>Total</th></tr></thead>
+            <thead><tr><th>Hora</th><th>Productos</th><th>Método</th><th>Referencia</th><th>Vendedor</th><th>Total</th><th></th></tr></thead>
             <tbody>
               {sales.length === 0 ? (
-                <tr><td colSpan={5} className="snack-empty">Todavía no hay ventas de snacks hoy en {locationLabel}.</td></tr>
-              ) : sales.map((sale) => (
-                <tr key={sale.id_venta}>
-                  <td>{timeBogota(sale.fecha_venta)}</td>
-                  <td>{sale.items.map((item) => `${item.cantidad}× ${item.nombre_producto}`).join(", ")}</td>
-                  <td>{sale.medio_pago}</td>
-                  <td>{sale.vendedor_email || "—"}</td>
-                  <td><strong>{money(sale.total)}</strong></td>
-                </tr>
-              ))}
+                <tr><td colSpan={7} className="snack-empty">Todavía no hay ventas de snacks hoy en {locationLabel}.</td></tr>
+              ) : sales.map((sale) => {
+                const editingReferenceNow = editingReferenceSaleId === sale.id_venta;
+                return (
+                  <tr key={sale.id_venta}>
+                    <td>{timeBogota(sale.fecha_venta)}</td>
+                    <td>{sale.items.map((item) => `${item.cantidad}× ${item.nombre_producto}`).join(", ")}</td>
+                    <td>{sale.medio_pago}</td>
+                    <td>
+                      {editingReferenceNow ? (
+                        <div className="snack-reference-editor">
+                          <input
+                            autoFocus
+                            value={editingReference}
+                            inputMode="numeric"
+                            maxLength={4}
+                            placeholder="4 dígitos"
+                            onChange={(e) => setEditingReference(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                          />
+                          <button
+                            className="snack-icon-btn"
+                            title="Guardar referencia"
+                            disabled={savingReference || Boolean(editingReference && editingReference.length !== 4)}
+                            onClick={() => savePaymentReference(sale)}
+                          >
+                            <Check size={14} />
+                          </button>
+                          <button
+                            className="snack-icon-btn"
+                            title="Cancelar"
+                            disabled={savingReference}
+                            onClick={() => { setEditingReferenceSaleId(null); setEditingReference(""); }}
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ) : sale.referencia_pago ? (
+                        <span className="snack-payment-reference">•••• {sale.referencia_pago}</span>
+                      ) : (
+                        <span className="snack-payment-reference empty">Sin referencia</span>
+                      )}
+                    </td>
+                    <td>{sale.vendedor_email || "—"}</td>
+                    <td><strong>{money(sale.total)}</strong></td>
+                    <td>
+                      {!editingReferenceNow && (
+                        <button
+                          className="snack-icon-btn"
+                          title="Editar únicamente la referencia de pago"
+                          onClick={() => beginEditReference(sale)}
+                        >
+                          <Pencil size={14} />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
