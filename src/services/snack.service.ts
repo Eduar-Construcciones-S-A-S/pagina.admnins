@@ -120,6 +120,7 @@ export type SnackSale = {
   id_venta: number;
   fecha_venta: string;
   medio_pago: string;
+  referencia_pago: string;
   total: number;
   vendedor_user_id: string | null;
   vendedor_email: string;
@@ -650,7 +651,7 @@ export async function getSnackSalesByDate(
 
   let query = client()
     .from("snack_venta")
-    .select("id_venta,fecha_venta,medio_pago,total,vendedor_user_id,vendedor_email,ubicacion_codigo")
+    .select("id_venta,fecha_venta,medio_pago,referencia_pago,total,vendedor_user_id,vendedor_email,ubicacion_codigo")
     .gte("fecha_venta", from)
     .lt("fecha_venta", to)
     .order("fecha_venta", { ascending: false });
@@ -692,6 +693,7 @@ export async function getSnackSalesByDate(
     id_venta: Number(row.id_venta),
     fecha_venta: String(row.fecha_venta),
     medio_pago: String(row.medio_pago ?? ""),
+    referencia_pago: String(row.referencia_pago ?? ""),
     total: num(row.total),
     vendedor_user_id: row.vendedor_user_id ? String(row.vendedor_user_id) : null,
     vendedor_email: String(row.vendedor_email ?? ""),
@@ -704,6 +706,7 @@ export async function registerSnackSale(
   items: SnackSaleInput[],
   medioPago: string,
   ubicacion: SnackLocationCode = "taquilla_1",
+  referenciaPago = "",
 ) {
   const current = await getCurrentRole();
   if (!current) throw new Error("No fue posible identificar el usuario que registra la venta.");
@@ -714,14 +717,19 @@ export async function registerSnackSale(
       cantidad: Math.floor(num(item.cantidad)),
     }))
     .filter((item) => item.id_producto > 0 && item.cantidad > 0);
+  const cleanReference = referenciaPago.replace(/\D/g, "").slice(0, 4);
 
   if (!cleanItems.length) throw new Error("Agrega al menos un producto a la venta.");
   if (!medioPago.trim()) throw new Error("Selecciona el método de pago.");
+  if (cleanReference && cleanReference.length !== 4) {
+    throw new Error("La referencia de pago debe tener los últimos 4 dígitos.");
+  }
 
   const { data, error } = await client().rpc("registrar_venta_snack", {
     p_items: cleanItems,
     p_medio_pago: medioPago.trim(),
     p_ubicacion: ubicacion,
+    p_referencia_pago: cleanReference || null,
   });
   if (error) throw error;
 
@@ -730,13 +738,32 @@ export async function registerSnackSale(
   return data;
 }
 
+export async function updateSnackSalePaymentReference(
+  idVenta: number,
+  referenciaPago: string,
+): Promise<string> {
+  const cleanReference = referenciaPago.replace(/\D/g, "").slice(0, 4);
+  if (cleanReference && cleanReference.length !== 4) {
+    throw new Error("La referencia de pago debe tener exactamente 4 dígitos.");
+  }
+
+  const { data, error } = await client().rpc("actualizar_referencia_pago_venta_snack", {
+    p_id_venta: Number(idVenta),
+    p_referencia_pago: cleanReference || null,
+  });
+  if (error) throw error;
+
+  window.dispatchEvent(new CustomEvent("snack-sale-recorded"));
+  return String((data as any)?.referencia_pago ?? cleanReference);
+}
+
 export async function getSnackSalesForReservation(idReserva: number): Promise<SnackSale[]> {
   const id = Number(idReserva);
   if (!Number.isInteger(id) || id <= 0) return [];
 
   const { data: salesData, error: salesError } = await client()
     .from("snack_venta")
-    .select("id_venta,fecha_venta,medio_pago,total,vendedor_user_id,vendedor_email,ubicacion_codigo")
+    .select("id_venta,fecha_venta,medio_pago,referencia_pago,total,vendedor_user_id,vendedor_email,ubicacion_codigo")
     .eq("id_reserva", id)
     .order("fecha_venta", { ascending: false });
   if (salesError) throw salesError;
@@ -773,6 +800,7 @@ export async function getSnackSalesForReservation(idReserva: number): Promise<Sn
     id_venta: Number(row.id_venta),
     fecha_venta: String(row.fecha_venta),
     medio_pago: String(row.medio_pago ?? ""),
+    referencia_pago: String(row.referencia_pago ?? ""),
     total: num(row.total),
     vendedor_user_id: row.vendedor_user_id ? String(row.vendedor_user_id) : null,
     vendedor_email: String(row.vendedor_email ?? ""),
