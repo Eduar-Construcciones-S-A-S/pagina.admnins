@@ -42,3 +42,14 @@
 .snack-difference-form{grid-column:1/-1;display:grid;grid-template-columns:180px minmax(260px,1fr) auto auto;gap:10px;align-items:end;padding-top:12px;border-top:1px solid #edf1ef}
 @media(max-width:1150px){.snack-expiry-form{grid-template-columns:repeat(2,minmax(0,1fr))}.snack-expiry-note{grid-column:span 2}.snack-verify-row{grid-template-columns:1fr 110px 1fr}.snack-verify-actions{grid-column:1/-1;justify-content:flex-start}.snack-difference-form{grid-template-columns:1fr 1fr}.snack-difference-form .snack-btn{width:100%}}
 @media(max-width:700px){.snack-expiry-form,.snack-difference-form{grid-template-columns:1fr}.snack-expiry-note{grid-column:auto}.snack-verify-row{grid-template-columns:1fr}.snack-verify-actions{grid-column:auto;justify-content:stretch}.snack-verify-actions .snack-btn{width:100%}.snack-difference-form{grid-column:auto}.snack-card-title{align-items:flex-start;gap:10px;flex-wrap:wrap}.snack-verify-location{width:100%}}
+
+
+/* Referencia opcional de pago en ventas de snacks */
+.snack-payment-label input{border:1px solid #d8e0dc;border-radius:9px;padding:9px 10px;background:#fff;color:#1f2937;outline:none}
+.snack-payment-label input:focus{border-color:#70a386;box-shadow:0 0 0 3px rgba(47,111,78,.1)}
+.snack-optional-label{font-size:10px;font-weight:600;color:#87938d}
+.snack-payment-reference{display:inline-flex;align-items:center;padding:4px 8px;border-radius:999px;background:#edf7f1;color:#2f6f4e;font-size:11px;font-weight:800;white-space:nowrap}
+.snack-payment-reference.empty{background:#f4f6f5;color:#7b8780;font-weight:700}
+.snack-reference-editor{display:flex;align-items:center;gap:5px;min-width:150px}
+.snack-reference-editor input{width:76px;box-sizing:border-box;border:1px solid #cfdad3;border-radius:8px;padding:7px 8px;text-align:center;letter-spacing:1px;color:#263d31;outline:none}
+.snack-reference-editor input:focus{border-color:#70a386;box-shadow:0 0 0 2px rgba(47,111,78,.1)}
