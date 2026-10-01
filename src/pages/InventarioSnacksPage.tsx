@@ -100,7 +100,8 @@ export default function InventarioSnacksPage() {
 
   const isAdmin = role === "administrador";
   const canManageInventory = role === "administrador" || role === "coordinador";
-  const canViewVerification = role === "administrador" || role === "coordinador" || role === "guia";\n  const canVerifyInventory = role === "coordinador" || role === "guia";
+  const canViewVerification = role === "administrador" || role === "coordinador" || role === "guia";
+  const canVerifyInventory = role === "coordinador" || role === "guia";
 
   const load = useCallback(async (silent = false) => {
     silent ? setRefreshing(true) : setLoading(true);
@@ -122,7 +123,7 @@ export default function InventarioSnacksPage() {
         setExpiryLots([]);
       }
 
-      if (currentRole === "coordinador" || currentRole === "guia") {
+      if (currentRole === "administrador" || currentRole === "coordinador" || currentRole === "guia") {
         setVerificationRows(await getSnackInventoryVerificationSnapshot(verifyLocation));
       } else {
         setVerificationRows([]);
