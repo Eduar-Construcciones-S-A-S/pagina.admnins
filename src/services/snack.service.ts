@@ -355,7 +355,7 @@ export async function saveSnackExpiryLot(args: {
   cantidad_actual: number;
   observacion?: string;
 }) {
-  await requireAdmin();
+  await requireInventoryManager();
   const quantity = Math.floor(num(args.cantidad_actual));
   if (!Number.isInteger(quantity) || quantity <= 0) {
     throw new Error("La cantidad del lote debe ser un entero mayor a cero.");
@@ -376,7 +376,7 @@ export async function saveSnackExpiryLot(args: {
 }
 
 export async function deleteSnackExpiryLot(idLote: number) {
-  await requireAdmin();
+  await requireInventoryManager();
   const { data, error } = await client().rpc("admin_eliminar_lote_vencimiento_snack", {
     p_id_lote_vencimiento: Number(idLote),
   });
