@@ -194,8 +194,8 @@ export default function ConsumoOperativoSnacksPage() {
             <strong>Selecciona de qué inventario salen los snacks</strong>
           </div>
         </div>
-        <div className="snack-form-grid">
-          <label>
+        <div>
+          <label className="snack-payment-label" style={{ maxWidth: 320, marginBottom: 0 }}>
             <span>Ubicación</span>
             <select
               value={ubicacion}
