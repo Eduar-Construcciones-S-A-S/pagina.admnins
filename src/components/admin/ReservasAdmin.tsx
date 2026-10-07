@@ -238,7 +238,7 @@ export default function ReservasAdmin() {
     if (!selectedPlan) return false;
     const ownName = normalizeName(selectedPlan.nombre_plan);
     const parentName = normalizeName(selectedParentPlan?.nombre_plan);
-    return ownName.includes("buggy") || ownName.includes("buggys") || parentName.includes("buggy") || parentName.includes("buggys");
+    return ownName.includes("bugg") || parentName.includes("bugg");
   }, [selectedPlan, selectedParentPlan]);
 
   const availableHours = useMemo(
