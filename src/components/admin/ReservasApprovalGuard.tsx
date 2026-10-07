@@ -11,6 +11,7 @@ import {
   type CodigoOperativo,
 } from "../../services/codigoOperativo.service";
 import {
+  getAdicionales,
   getPlanAdicionales,
   getReservaAdicionales,
   impactoPlanAdicionalCantidad,
@@ -18,6 +19,7 @@ import {
   normalizarCantidadPlanAdicional,
   precioEfectivoPlanAdicional,
   replaceReservaAdicionales,
+  type Adicional,
   type PlanAdicional,
   type ReservaAdicional,
   type ReservaAdicionalInput,
@@ -52,6 +54,7 @@ export default function ReservasApprovalGuard() {
   const [restaurantes, setRestaurantes] = useState<string[]>([]);
   const [codigos, setCodigos] = useState<CodigoOperativo[]>([]);
   const [planAdicionales, setPlanAdicionales] = useState<PlanAdicional[]>([]);
+  const [adicionalesCatalogo, setAdicionalesCatalogo] = useState<Adicional[]>([]);
   const [adicionalCantidad, setAdicionalCantidad] = useState<Record<number, number>>({});
   const [incluirAdicionales, setIncluirAdicionales] = useState(false);
   const [reservaAdicionalesOriginales, setReservaAdicionalesOriginales] = useState<ReservaAdicional[]>([]);
@@ -71,13 +74,21 @@ export default function ReservasApprovalGuard() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([getReservas(), getMetodosPagoActivos(), getRestaurantesActivos(), getCodigosOperativos(), getPlanAdicionales().catch(() => [])])
-      .then(([reservasData, metodosData, restaurantesData, codigosData, adicionalesData]) => {
+    Promise.all([
+      getReservas(),
+      getMetodosPagoActivos(),
+      getRestaurantesActivos(),
+      getCodigosOperativos(),
+      getPlanAdicionales().catch(() => []),
+      getAdicionales(true).catch(() => []),
+    ])
+      .then(([reservasData, metodosData, restaurantesData, codigosData, adicionalesData, catalogoData]) => {
         setReservas(Array.isArray(reservasData) ? reservasData : []);
         setMetodosPago(Array.isArray(metodosData) ? metodosData : []);
         setRestaurantes(Array.isArray(restaurantesData) ? restaurantesData : []);
         setCodigos(codigosData);
         setPlanAdicionales(adicionalesData);
+        setAdicionalesCatalogo(Array.isArray(catalogoData) ? catalogoData : []);
       })
       .catch((e) => console.error("No se pudieron precargar los datos para aprobación", e));
   }, []);
@@ -86,6 +97,11 @@ export default function ReservasApprovalGuard() {
     () => selected ? planAdicionales.filter((item) => Number(item.id_plan) === Number(selected.id_plan) && item.activo && item.adicional.activo) : [],
     [planAdicionales, selected],
   );
+  const adicionalesLibres = useMemo(() => {
+    const configuredIds = new Set(adicionalesDelPlan.map((item) => Number(item.id_adicional)));
+    return adicionalesCatalogo.filter((item) => item.activo && !configuredIds.has(Number(item.id_adicional)));
+  }, [adicionalesCatalogo, adicionalesDelPlan]);
+
   const almuerzoConfigurado = useMemo(
     () => adicionalesDelPlan.find((item) => item.adicional.codigo === "almuerzo") ?? null,
     [adicionalesDelPlan],
@@ -163,6 +179,12 @@ export default function ReservasApprovalGuard() {
 
       return [item.id_adicional, normalizarCantidadPlanAdicional(item, selectedQuantity, cantidad)];
     })) as Record<number, number>;
+
+    for (const existing of existentes) {
+      if (existing.tipo_movimiento !== "agregado") continue;
+      if (Object.prototype.hasOwnProperty.call(cantidades, existing.id_adicional)) continue;
+      cantidades[Number(existing.id_adicional)] = Math.max(0, Number(existing.cantidad_aplicada || 0));
+    }
     const lunch = adicionalesPlan.find((item) => item.adicional.codigo === "almuerzo");
 
     setSelected(reserva);
@@ -197,6 +219,19 @@ export default function ReservasApprovalGuard() {
     const normalized = normalizarCantidadPlanAdicional(item, quantity, cantidadPersonas);
     setAdicionalCantidad((current) => ({ ...current, [item.id_adicional]: normalized }));
     if (item.adicional.codigo === "almuerzo") {
+      const hasLunch = normalized > 0;
+      setIncluyeAlmuerzo(hasLunch);
+      if (!hasLunch) setRestaurante("");
+    }
+    setError(null);
+  };
+
+  const setCantidadAdicionalLibre = (item: Adicional, quantity: number) => {
+    const cantidadPersonas = Math.max(1, Number(selected?.cantidad_personas || 1));
+    const max = item.tipo_cobro === "por_persona" ? cantidadPersonas : 1;
+    const normalized = Math.min(max, Math.max(0, Math.floor(Number(quantity) || 0)));
+    setAdicionalCantidad((current) => ({ ...current, [item.id_adicional]: normalized }));
+    if (item.codigo === "almuerzo") {
       const hasLunch = normalized > 0;
       setIncluyeAlmuerzo(hasLunch);
       if (!hasLunch) setRestaurante("");
@@ -261,7 +296,31 @@ export default function ReservasApprovalGuard() {
       }];
     });
 
-    const impactoAdicionales = movimientosAdicionales.reduce((total, item) => total + Number(item.impacto_total || 0), 0);
+    const movimientosAdicionalesLibres: ReservaAdicionalInput[] = incluirAdicionales
+      ? adicionalesLibres.flatMap<ReservaAdicionalInput>((item) => {
+          const max = item.tipo_cobro === "por_persona" ? cantidad : 1;
+          const seleccionada = Math.min(
+            max,
+            Math.max(0, Math.floor(Number(adicionalCantidad[item.id_adicional] || 0))),
+          );
+          if (seleccionada <= 0) return [];
+
+          const precio = Number(item.precio || 0);
+          return [{
+            id_adicional: item.id_adicional,
+            codigo_adicional: item.codigo,
+            nombre_adicional: item.nombre,
+            tipo_cobro: item.tipo_cobro,
+            tipo_movimiento: "agregado" as const,
+            precio_unitario: precio,
+            cantidad_aplicada: seleccionada,
+            impacto_total: precio * seleccionada,
+          }];
+        })
+      : [];
+
+    const movimientosAdicionalesFinales = [...movimientosAdicionales, ...movimientosAdicionalesLibres];
+    const impactoAdicionales = movimientosAdicionalesFinales.reduce((total, item) => total + Number(item.impacto_total || 0), 0);
     const totalNuevo = advancedOption === "valor_total"
       ? parseMoney(valorTotal)
       : advancedOption === "valor_unitario"
@@ -329,7 +388,7 @@ export default function ReservasApprovalGuard() {
 
       await updateReserva(selected.id_reserva, patch);
       reservaActualizada = true;
-      await replaceReservaAdicionales(selected.id_reserva, movimientosAdicionales);
+      await replaceReservaAdicionales(selected.id_reserva, movimientosAdicionalesFinales);
 
       await aprobarReservaOperativa({
         id_reserva: selected.id_reserva,
@@ -380,11 +439,23 @@ export default function ReservasApprovalGuard() {
       cantidadSeleccionada,
     );
   }, 0);
+  const impactoAdicionalesLibresVista = incluirAdicionales
+    ? adicionalesLibres.reduce((total, item) => {
+        const max = item.tipo_cobro === "por_persona" ? cantidadSeleccionada : 1;
+        const quantity = Math.min(
+          max,
+          Math.max(0, Math.floor(Number(adicionalCantidad[item.id_adicional] || 0))),
+        );
+        return total + Number(item.precio || 0) * quantity;
+      }, 0)
+    : 0;
+  const impactoAdicionalesTotalVista = impactoAdicionalesVista + impactoAdicionalesLibresVista;
+
   const totalVista = advancedOption === "valor_unitario"
     ? parseMoney(valorUnitario) * cantidadSeleccionada
     : advancedOption === "valor_total"
       ? parseMoney(valorTotal)
-      : totalBaseOriginalVista + impactoAdicionalesVista;
+      : totalBaseOriginalVista + impactoAdicionalesTotalVista;
   const unitarioVista = totalVista / cantidadSeleccionada;
 
   return <>
@@ -646,6 +717,9 @@ export default function ReservasApprovalGuard() {
                               for (const item of adicionalesDelPlan) {
                                 if (item.modalidad === "opcional") next[item.id_adicional] = 0;
                               }
+                              for (const item of adicionalesLibres) {
+                                next[item.id_adicional] = 0;
+                              }
                               return next;
                             });
                           }
@@ -718,6 +792,66 @@ export default function ReservasApprovalGuard() {
                       </div>
                     );
                   })}
+
+                  {incluirAdicionales && adicionalesLibres.length > 0 && (
+                    <>
+                      <div style={{ margin: "5px 0 2px", paddingTop: 8, borderTop: "1px solid #eee7de" }}>
+                        <strong style={{ display: "block", fontSize: 13, color: "#5b5147" }}>
+                          Otros adicionales disponibles
+                        </strong>
+                        <small style={{ color: "#82786d" }}>
+                          Puedes agregar cualquiera de estos servicios aunque no venga incluido originalmente en el plan.
+                        </small>
+                      </div>
+
+                      {adicionalesLibres.map((item) => {
+                        const perPerson = item.tipo_cobro === "por_persona";
+                        const max = perPerson ? cantidadSeleccionada : 1;
+                        const quantity = Math.min(
+                          max,
+                          Math.max(0, Math.floor(Number(adicionalCantidad[item.id_adicional] || 0))),
+                        );
+                        const impacto = Number(item.precio || 0) * quantity;
+
+                        return (
+                          <div key={`libre-${item.id_adicional}`} style={{ display: "grid", gap: 8, padding: "10px 11px", border: "1px solid #eee7de", borderRadius: 10 }}>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                              <span>
+                                <strong style={{ display: "block" }}>{item.nombre}</strong>
+                                <small style={{ color: "#82786d" }}>
+                                  Opcional · ${formatMoney(item.precio)} {perPerson ? "por persona" : "por reserva"}
+                                </small>
+                              </span>
+                              <strong style={{ color: impacto > 0 ? "#2f765b" : "#82786d", whiteSpace: "nowrap" }}>
+                                {impacto > 0 ? "+" : ""}${formatMoney(impacto)}
+                              </strong>
+                            </div>
+
+                            {perPerson ? (
+                              <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                                <small style={{ color: "#6f665d", fontWeight: 700 }}>Personas que lo quieren</small>
+                                <select value={quantity} disabled={saving} onChange={(e) => setCantidadAdicionalLibre(item, Number(e.target.value))}>
+                                  {Array.from({ length: max + 1 }, (_, value) => (
+                                    <option key={value} value={value}>{value} / {max}</option>
+                                  ))}
+                                </select>
+                              </label>
+                            ) : (
+                              <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                                <small style={{ color: "#6f665d", fontWeight: 700 }}>Agregar servicio</small>
+                                <input
+                                  type="checkbox"
+                                  checked={quantity > 0}
+                                  disabled={saving}
+                                  onChange={(e) => setCantidadAdicionalLibre(item, e.target.checked ? 1 : 0)}
+                                />
+                              </label>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </>
+                  )}
                   </div>
                   </div>
                 ) : (
