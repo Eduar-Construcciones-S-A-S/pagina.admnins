@@ -666,6 +666,7 @@ export default function ReservasApprovalGuard() {
                     );
                   })}
                   </div>
+                  </div>
                 ) : (
                   <div style={{
                     padding: 14,
