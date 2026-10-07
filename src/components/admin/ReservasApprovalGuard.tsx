@@ -53,6 +53,7 @@ export default function ReservasApprovalGuard() {
   const [codigos, setCodigos] = useState<CodigoOperativo[]>([]);
   const [planAdicionales, setPlanAdicionales] = useState<PlanAdicional[]>([]);
   const [adicionalCantidad, setAdicionalCantidad] = useState<Record<number, number>>({});
+  const [incluirAdicionales, setIncluirAdicionales] = useState(false);
   const [reservaAdicionalesOriginales, setReservaAdicionalesOriginales] = useState<ReservaAdicional[]>([]);
   const [selected, setSelected] = useState<ReservaLite | null>(null);
   const [valorAbonado, setValorAbonado] = useState("");
@@ -170,6 +171,7 @@ export default function ReservasApprovalGuard() {
     setReferenciaPagoAbono("");
     setReservaAdicionalesOriginales(existentes);
     setAdicionalCantidad(cantidades);
+    setIncluirAdicionales(existentes.some((row) => row.tipo_movimiento === "agregado" && Number(row.cantidad_aplicada || 0) > 0));
     setIncluyeAlmuerzo(lunch ? Number(cantidades[lunch.id_adicional] || 0) > 0 : false);
     setRestaurante("");
     setCodigoId("");
@@ -186,6 +188,7 @@ export default function ReservasApprovalGuard() {
       setSelected(null);
       setAdicionalCantidad({});
       setReservaAdicionalesOriginales([]);
+      setIncluirAdicionales(false);
     }
   };
 
@@ -219,7 +222,7 @@ export default function ReservasApprovalGuard() {
       const impacto = impactoPlanAdicionalCantidad(item, seleccionada, cantidad);
 
       if (item.modalidad === "opcional") {
-        if (seleccionada <= 0) return [];
+        if (!incluirAdicionales || seleccionada <= 0) return [];
         return [{
           id_adicional: item.id_adicional,
           codigo_adicional: item.adicional.codigo,
@@ -366,14 +369,17 @@ export default function ReservasApprovalGuard() {
   const cantidadSeleccionada = Math.max(1, Number(selected?.cantidad_personas || 1));
   const impactoOriginalVista = reservaAdicionalesOriginales.reduce((total, item) => total + Number(item.impacto_total || 0), 0);
   const totalBaseOriginalVista = Number(selected?.valor_total || 0) - impactoOriginalVista;
-  const impactoAdicionalesVista = adicionalesDelPlan.reduce(
-    (total, item) => total + impactoPlanAdicionalCantidad(
+  const impactoAdicionalesVista = adicionalesDelPlan.reduce((total, item) => {
+    const quantity = item.modalidad === "opcional" && !incluirAdicionales
+      ? 0
+      : adicionalCantidad[item.id_adicional] ?? (item.modalidad === "incluido" ? maxCantidadPlanAdicional(item, cantidadSeleccionada) : 0);
+
+    return total + impactoPlanAdicionalCantidad(
       item,
-      adicionalCantidad[item.id_adicional] ?? (item.modalidad === "incluido" ? maxCantidadPlanAdicional(item, cantidadSeleccionada) : 0),
+      quantity,
       cantidadSeleccionada,
-    ),
-    0,
-  );
+    );
+  }, 0);
   const totalVista = advancedOption === "valor_unitario"
     ? parseMoney(valorUnitario) * cantidadSeleccionada
     : advancedOption === "valor_total"
@@ -620,16 +626,63 @@ export default function ReservasApprovalGuard() {
               <div style={{ display: "grid", gap: 10 }}>
                 {adicionalesDelPlan.length > 0 ? (
                   <div style={{ border: "1px solid #e4ddd4", borderRadius: 14, padding: 14, background: "#fff" }}>
-                <div style={{ marginBottom: 10 }}>
-                  <strong style={{ display: "block", fontSize: 15 }}>Adicionales del plan</strong>
-                  <small style={{ color: "#81776c" }}>Los opcionales suman al precio. Los incluidos solo descuentan valor cuando el plan permite retirarlos.</small>
-                </div>
-                <div style={{ display: "grid", gap: 9 }}>
+                    <div style={{ marginBottom: 12 }}>
+                      <strong style={{ display: "block", fontSize: 15 }}>Adicionales de la reserva</strong>
+                      <small style={{ color: "#81776c" }}>
+                        Los adicionales opcionales que selecciones se sumarán automáticamente al valor total antes de aprobar.
+                      </small>
+                    </div>
+
+                    <div className="rv-form-group" style={{ marginBottom: 12 }}>
+                      <label>¿Deseas incluir adicionales?</label>
+                      <select
+                        value={incluirAdicionales ? "si" : "no"}
+                        onChange={(e) => {
+                          const enabled = e.target.value === "si";
+                          setIncluirAdicionales(enabled);
+                          if (!enabled) {
+                            setAdicionalCantidad((current) => {
+                              const next = { ...current };
+                              for (const item of adicionalesDelPlan) {
+                                if (item.modalidad === "opcional") next[item.id_adicional] = 0;
+                              }
+                              return next;
+                            });
+                          }
+                          setError(null);
+                        }}
+                        disabled={saving}
+                      >
+                        <option value="no">No</option>
+                        <option value="si">Sí</option>
+                      </select>
+                    </div>
+
+                    <div style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr auto",
+                      gap: 10,
+                      alignItems: "center",
+                      padding: "10px 12px",
+                      marginBottom: 12,
+                      borderRadius: 10,
+                      background: "#fff8ec",
+                      border: "1px solid #ead9bf",
+                    }}>
+                      <span style={{ fontSize: 12, color: "#6f665d", fontWeight: 700 }}>
+                        Total actual de la reserva
+                      </span>
+                      <strong style={{ color: "#2d241a", fontSize: 18 }}>${formatMoney(totalVista)}</strong>
+                    </div>
+
+                    <div style={{ display: "grid", gap: 9 }}>
                   {adicionalesDelPlan.map((item) => {
                     const max = maxCantidadPlanAdicional(item, cantidadSeleccionada);
                     const quantity = normalizarCantidadPlanAdicional(
                       item,
-                      adicionalCantidad[item.id_adicional] ?? (item.modalidad === "incluido" ? max : 0),
+                      item.modalidad === "opcional" && !incluirAdicionales
+                        ? 0
+                        : adicionalCantidad[item.id_adicional] ?? (item.modalidad === "incluido" ? max : 0),
                       cantidadSeleccionada,
                     );
                     const precio = precioEfectivoPlanAdicional(item);
@@ -652,14 +705,14 @@ export default function ReservasApprovalGuard() {
                         ) : perPerson ? (
                           <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
                             <small style={{ color: "#6f665d", fontWeight: 700 }}>{item.modalidad === "incluido" ? "Personas que mantienen el servicio" : "Personas que lo quieren"}</small>
-                            <select value={quantity} disabled={saving} onChange={(e) => setCantidadAdicional(item, Number(e.target.value))}>
+                            <select value={quantity} disabled={saving || (item.modalidad === "opcional" && !incluirAdicionales)} onChange={(e) => setCantidadAdicional(item, Number(e.target.value))}>
                               {Array.from({ length: max + 1 }, (_, value) => <option key={value} value={value}>{value} / {max}</option>)}
                             </select>
                           </label>
                         ) : (
                           <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
                             <small style={{ color: "#6f665d", fontWeight: 700 }}>{item.modalidad === "incluido" ? "Mantener servicio" : "Agregar servicio"}</small>
-                            <input type="checkbox" checked={quantity > 0} disabled={saving} onChange={(e) => setCantidadAdicional(item, e.target.checked ? 1 : 0)}/>
+                            <input type="checkbox" checked={quantity > 0} disabled={saving || (item.modalidad === "opcional" && !incluirAdicionales)} onChange={(e) => setCantidadAdicional(item, e.target.checked ? 1 : 0)}/>
                           </label>
                         )}
                       </div>
