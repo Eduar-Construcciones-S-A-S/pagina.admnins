@@ -40,6 +40,12 @@ const saved = (v: unknown) => (v === "" || v == null ? 0 : Number(v));
 const phone = (v: string) => String(v || "").replace(/\D/g, "");
 const fmtPago = (value?: string | null) => value ? new Date(value).toLocaleString("es-CO", { timeZone:"America/Bogota", day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" }) : "—";
 const today = () => new Date().toLocaleDateString("en-CA", { timeZone:"America/Bogota" });
+const bogotaDateKey = (value?: string | null) => {
+  if (!value) return "";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return String(value).slice(0,10);
+  return parsed.toLocaleDateString("en-CA", { timeZone:"America/Bogota" });
+};
 type Split = { monto: number; medio_pago: string };
 type RefundForm = { monto:number; medio_pago:string; tipo_devolucion:"parcial"|"total"; motivo:string; observacion:string };
 const emptyRefund = ():RefundForm => ({monto:0,medio_pago:"",tipo_devolucion:"parcial",motivo:"",observacion:""});
@@ -113,11 +119,11 @@ export default function ControlOperativoPage() {
     }
 
     pagos
-      .filter(p=>String(p.fecha_pago||"").slice(0,10)===fechaDevolucion)
+      .filter(p=>bogotaDateKey(p.fecha_pago)===fechaDevolucion)
       .forEach(p=>map.set(p.medio_pago,(map.get(p.medio_pago)||0)+Number(p.monto||0)));
 
     devoluciones
-      .filter(d=>String(d.fecha_devolucion||d.created_at||"").slice(0,10)===fechaDevolucion)
+      .filter(d=>bogotaDateKey(d.fecha_devolucion||d.created_at)===fechaDevolucion)
       .forEach(d=>map.set(d.medio_pago,(map.get(d.medio_pago)||0)-Number(d.monto||0)));
 
     return[...map.entries()]
