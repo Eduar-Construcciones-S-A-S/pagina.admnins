@@ -558,8 +558,8 @@ export default function ControlOperativoExcelExport() {
                         <option value="">Todos</option><option value="programada">Programada</option><option value="asistio">Asistió</option><option value="no_asistio">No asistió</option><option value="reprogramada">Reprogramada</option><option value="cancelada">Cancelada</option>
                       </select>
                     </label>
-                    <label style={{ display:"grid", gap:6, fontSize:12, fontWeight:700, color:"#5f5244" }}>Plan
-                      <select value={filters.plan} onChange={(e) => setFilters((current) => ({...current, plan:e.target.value}))} style={{ height:42, border:"1px solid #d9c4a6", borderRadius:10, padding:"0 10px" }}>
+                    <label style={{ display:"grid", gap:6, minWidth:0, fontSize:12, fontWeight:700, color:"#5f5244" }}>Plan
+                      <select value={filters.plan} onChange={(e) => setFilters((current) => ({...current, plan:e.target.value}))} style={{ width:"100%", minWidth:0, maxWidth:"100%", boxSizing:"border-box", height:42, border:"1px solid #d9c4a6", borderRadius:10, padding:"0 10px" }}>
                         <option value="">Todos</option>{exportPlans.map((item) => <option key={item} value={item}>{item}</option>)}
                       </select>
                     </label>
