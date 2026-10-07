@@ -39,7 +39,7 @@ type ReservaLite = {
   nombre_plan?: string | null;
 };
 
-type AdvancedOption = "" | "refrigerio" | "valor_total" | "valor_unitario";
+type AdvancedOption = "" | "refrigerio" | "adicionales" | "valor_total" | "valor_unitario";
 
 const onlyDigits = (value: string) => value.replace(/\D/g, "");
 const parseMoney = (value: string) => Number(value.replace(/\./g, "").replace(/,/g, ".").replace(/[^\d.]/g, "") || 0);
@@ -453,6 +453,7 @@ export default function ReservasApprovalGuard() {
                 >
                   <option value="">Selecciona una opción</option>
                   <option value="refrigerio">Refrigerio</option>
+                  <option value="adicionales">Adicionales</option>
                   <option value="valor_total">Cambiar valor total</option>
                   <option value="valor_unitario">Cambiar valor unitario</option>
                 </select>
@@ -615,8 +616,10 @@ export default function ReservasApprovalGuard() {
               </div>
             </div>
 
-            {adicionalesDelPlan.length > 0 && (
-              <div style={{ marginTop: 14, border: "1px solid #e4ddd4", borderRadius: 14, padding: 14, background: "#fff" }}>
+            {advancedOption === "adicionales" && (
+              <div style={{ display: "grid", gap: 10 }}>
+                {adicionalesDelPlan.length > 0 ? (
+                  <div style={{ border: "1px solid #e4ddd4", borderRadius: 14, padding: 14, background: "#fff" }}>
                 <div style={{ marginBottom: 10 }}>
                   <strong style={{ display: "block", fontSize: 15 }}>Adicionales del plan</strong>
                   <small style={{ color: "#81776c" }}>Los opcionales suman al precio. Los incluidos solo descuentan valor cuando el plan permite retirarlos.</small>
@@ -662,7 +665,19 @@ export default function ReservasApprovalGuard() {
                       </div>
                     );
                   })}
-                </div>
+                  </div>
+                ) : (
+                  <div style={{
+                    padding: 14,
+                    border: "1px solid #e4ddd4",
+                    borderRadius: 12,
+                    background: "#fff",
+                    color: "#81776c",
+                    fontSize: 13,
+                  }}>
+                    Este plan no tiene adicionales configurados.
+                  </div>
+                )}
               </div>
             )}
 
