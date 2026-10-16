@@ -88,7 +88,44 @@
 .op-table-operational th:nth-child(28),
 .op-table-operational td:nth-child(28){width:76px!important;text-align:center}
 .op-table-operational .op-reference-cell{font-weight:800;letter-spacing:.06em;text-align:center;color:#5d4a2f}
-.op-table-operational .op-observation-cell{max-width:230px!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important}
+.op-table-operational .op-observation-cell{
+  max-width:230px!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+  white-space:nowrap!important;
+}
+
+/* Mantener Observación y Acciones visibles al final del Control Operativo. */
+.op-table-operational th:nth-child(27),
+.op-table-operational td:nth-child(27){
+  position:sticky!important;
+  right:76px!important;
+  z-index:6!important;
+  background:#fff!important;
+  box-shadow:-5px 0 12px -12px rgba(31,25,18,.55);
+}
+.op-table-operational th:nth-child(28),
+.op-table-operational td:nth-child(28){
+  position:sticky!important;
+  right:0!important;
+  z-index:7!important;
+  background:#fff!important;
+}
+.op-table-operational th:nth-child(27),
+.op-table-operational th:nth-child(28){
+  background:#2f6958!important;
+  color:#fff!important;
+  z-index:12!important;
+}
+.op-table-operational tbody tr:nth-child(even) td:nth-child(27),
+.op-table-operational tbody tr:nth-child(even) td:nth-child(28){
+  background:#fdfbf8!important;
+}
+.op-table-operational tbody tr:hover td:nth-child(27),
+.op-table-operational tbody tr:hover td:nth-child(28){
+  background:#fff7e9!important;
+}
+
 .op-table-operational td[title]{cursor:help}
 @media(max-width:700px){
   .op-table-operational{
