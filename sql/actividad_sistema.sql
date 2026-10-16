@@ -213,8 +213,8 @@ security definer
 set search_path = public, auth
 as $$
 declare
-  v_old jsonb := case when tg_op in ('UPDATE','DELETE') then to_jsonb(old) else null end;
-  v_new jsonb := case when tg_op in ('INSERT','UPDATE') then to_jsonb(new) else null end;
+  v_old jsonb;
+  v_new jsonb;
   v_actor uuid := auth.uid();
   v_username text;
   v_email text;
@@ -223,8 +223,17 @@ declare
   v_accion text;
   v_source text := 'usuario';
 begin
+  if tg_op in ('UPDATE','DELETE') then
+    v_old := to_jsonb(old);
+  end if;
+
+  if tg_op in ('INSERT','UPDATE') then
+    v_new := to_jsonb(new);
+  end if;
+
   if tg_table_name = 'actividad_sistema' then
-    return coalesce(new, old);
+    if tg_op = 'DELETE' then return old; end if;
+    return new;
   end if;
 
   if tg_op = 'UPDATE' then
@@ -302,12 +311,18 @@ begin
     v_cambios
   );
 
-  return coalesce(new, old);
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
+  return new;
 exception
   when others then
     -- La auditoría nunca debe impedir la operación principal.
     raise warning 'No fue posible registrar actividad para %.%: %', tg_table_schema, tg_table_name, sqlerrm;
-    return coalesce(new, old);
+    if tg_op = 'DELETE' then
+      return old;
+    end if;
+    return new;
 end;
 $$;
 
