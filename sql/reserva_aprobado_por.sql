@@ -81,18 +81,18 @@ begin
         aprobado_por_user_id = a.actor_user_id,
         aprobado_por_username = a.actor_username,
         aprobado_por_email = a.actor_email
-      from lateral (
-        select
+      from (
+        select distinct on (act.registro_id)
+          act.registro_id,
           act.actor_user_id,
           act.actor_username,
           act.actor_email
         from public.actividad_sistema act
         where act.accion = 'aprobar_reserva'
-          and act.registro_id = r.id_reserva::text
-        order by act.fecha desc
-        limit 1
+        order by act.registro_id, act.fecha desc
       ) a
-      where coalesce(r.aprobado, false) = true
+      where a.registro_id = r.id_reserva::text
+        and coalesce(r.aprobado, false) = true
         and r.aprobado_por_user_id is null
     $sql$;
   end if;
