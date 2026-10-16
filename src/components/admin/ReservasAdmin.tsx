@@ -31,17 +31,6 @@ import {
   UserCheck,
 } from "lucide-react";
 import { calcularPrecioPlan, calcularTotalPlan } from "../../services/planTarifa.service";
-import {
-  getAdicionales,
-  getPlanAdicionales,
-  getReservaAdicionales,
-  maxCantidadPlanAdicional,
-  precioEfectivoPlanAdicional,
-  replaceReservaAdicionales,
-  type Adicional,
-  type PlanAdicional,
-  type ReservaAdicionalInput,
-} from "../../services/adicional.service";
 import ReservationApprovalModal from "../common/ReservationApprovalModal";
 import LargeGroupExcelImport, { type ImportedGroupParticipant } from "./LargeGroupExcelImport";
 import "../../styles/reservas.css";
@@ -188,10 +177,6 @@ export default function ReservasAdmin() {
   const [reservas, setReservas] = useState<Reserva[]>([]);
   const [planes, setPlanes] = useState<Plan[]>([]);
   const [clientes, setClientes] = useState<{ telefono: string }[]>([]);
-  const [adicionalesCatalogo, setAdicionalesCatalogo] = useState<Adicional[]>([]);
-  const [planAdicionales, setPlanAdicionales] = useState<PlanAdicional[]>([]);
-  const [adicionalCantidad, setAdicionalCantidad] = useState<Record<number, number>>({});
-  const [loadingAdicionales, setLoadingAdicionales] = useState(false);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [estadoFilter, setEstadoFilter] = useState<"todos" | "aprobado" | "pendiente">("todos");
@@ -223,18 +208,10 @@ export default function ReservasAdmin() {
   const fetchAll = async () => {
     try {
       setLoading(true);
-      const [r, p, c, adicionales, relacionesAdicionales] = await Promise.all([
-        getReservas(),
-        getPlanes(),
-        getClientes(),
-        getAdicionales(true).catch(() => []),
-        getPlanAdicionales().catch(() => []),
-      ]);
+      const [r, p, c] = await Promise.all([getReservas(), getPlanes(), getClientes()]);
       setReservas(r);
       setPlanes(p);
       setClientes(c);
-      setAdicionalesCatalogo(Array.isArray(adicionales) ? adicionales : []);
-      setPlanAdicionales(Array.isArray(relacionesAdicionales) ? relacionesAdicionales : []);
     } catch (e) {
       console.error(e);
     } finally {
@@ -253,26 +230,6 @@ export default function ReservasAdmin() {
         : planes.find((p) => Number(p.id_plan) === Number(formData.id_plan)) ?? null,
     [planes, formData.id_plan],
   );
-
-  const adicionalesDelPlan = useMemo(
-    () =>
-      selectedPlan
-        ? planAdicionales.filter(
-            (item) =>
-              Number(item.id_plan) === Number(selectedPlan.id_plan) &&
-              item.activo &&
-              item.adicional.activo,
-          )
-        : [],
-    [planAdicionales, selectedPlan],
-  );
-
-  const adicionalesLibres = useMemo(() => {
-    const configuredIds = new Set(adicionalesDelPlan.map((item) => Number(item.id_adicional)));
-    return adicionalesCatalogo.filter(
-      (item) => item.activo && !configuredIds.has(Number(item.id_adicional)),
-    );
-  }, [adicionalesCatalogo, adicionalesDelPlan]);
 
   const selectedParentPlan = useMemo(
     () => selectedPlan?.id_plan_padre
@@ -429,7 +386,6 @@ export default function ReservasAdmin() {
     setFormData(emptyForm);
     setNewParticipants([emptyParticipant()]);
     setDeletedParticipantIds([]);
-    setAdicionalCantidad({});
     setBuggyCount(1);
     setBuggyPricing(null);
     setFormError(null);
@@ -455,7 +411,6 @@ export default function ReservasAdmin() {
     });
     setNewParticipants([]);
     setDeletedParticipantIds([]);
-    setAdicionalCantidad({});
     let savedBuggyCount = defaultBuggyCount(Number(r.cantidad_personas ?? 1));
     try {
       const parsed = r.observacion ? JSON.parse(r.observacion) : null;
