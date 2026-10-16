@@ -9,10 +9,13 @@
    La tabla tiene un ancho exacto igual a la suma de sus 28 columnas para evitar
    zonas blancas internas al desplazarse horizontalmente. */
 .op-table-operational{
-  min-width:3091px!important;
-  width:3091px!important;
-  max-width:3091px!important;
-  table-layout:fixed!important;
+  /* No forzar un ancho total: el navegador calcula el ancho real a partir
+     de las 28 columnas. Así el scroll termina exactamente en Acciones y
+     nunca queda una franja vacía después de la tabla. */
+  width:max-content!important;
+  min-width:100%!important;
+  max-width:none!important;
+  table-layout:auto!important;
 }
 .op-table-operational th,
 .op-table-operational td{
@@ -82,9 +85,9 @@
 .op-table-operational td[title]{cursor:help}
 @media(max-width:700px){
   .op-table-operational{
-    min-width:3091px!important;
-    width:3091px!important;
-    max-width:3091px!important;
+    width:max-content!important;
+    min-width:100%!important;
+    max-width:none!important;
   }
   .op-table-operational th:nth-child(2),
   .op-table-operational td:nth-child(2){width:235px!important;min-width:235px!important;max-width:235px!important}
