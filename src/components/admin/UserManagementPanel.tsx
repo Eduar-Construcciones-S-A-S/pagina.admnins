@@ -9,6 +9,14 @@ import {
   type ManagedUserRole,
 } from "../../services/adminUsers.service";
 
+const roleLabel = (role: string) => {
+  if (role === "administrador") return "Administrador";
+  if (role === "atencion") return "Atención";
+  if (role === "coordinador") return "Coordinador";
+  if (role === "guia") return "Guía";
+  return role || "—";
+};
+
 const formatDate = (value?: string | null) => {
   if (!value) return "Nunca";
   try {
@@ -81,7 +89,7 @@ export default function UserManagementPanel() {
     setSuccess("");
     try {
       await createManagedUser(cleanUsername, cleanEmail, password, role);
-      setSuccess(`Usuario ${cleanUsername} (${cleanEmail}) creado como ${role === "guia" ? "Guía" : "Coordinador"}. La contraseña fue establecida correctamente.`);
+      setSuccess(`Usuario ${cleanUsername} (${cleanEmail}) creado como ${roleLabel(role)}. La contraseña fue establecida correctamente.`);
       setUsername("");
       setEmail("");
       setPassword("");
@@ -159,7 +167,7 @@ export default function UserManagementPanel() {
         </div>
 
         <p className="snack-admin-note">
-          Crea cuentas personales para guías y coordinadores. Por seguridad, Supabase no permite recuperar una contraseña existente:
+          Crea cuentas personales para cualquier rol del sistema. Por seguridad, Supabase no permite recuperar una contraseña existente:
           puedes definirla al crear la cuenta y, si se pierde, establecer una nueva desde aquí.
         </p>
 
@@ -190,8 +198,10 @@ export default function UserManagementPanel() {
           <label>
             Rol *
             <select value={role} onChange={(e) => setRole(e.target.value as ManagedUserRole)}>
-              <option value="guia">Guía</option>
+              <option value="administrador">Administrador</option>
+              <option value="atencion">Atención</option>
               <option value="coordinador">Coordinador</option>
+              <option value="guia">Guía</option>
             </select>
           </label>
 
@@ -220,7 +230,7 @@ export default function UserManagementPanel() {
 
       <section className="snack-card">
         <div className="snack-card-title">
-          <div><UsersRound size={18} /><strong>Usuarios de guías y coordinadores</strong></div>
+          <div><UsersRound size={18} /><strong>Usuarios del sistema</strong></div>
           <button className="snack-btn secondary" onClick={() => load(true)} disabled={refreshing}>
             <RefreshCw size={15} className={refreshing ? "spin-icon" : ""} />
             Actualizar
@@ -243,12 +253,12 @@ export default function UserManagementPanel() {
               {loading ? (
                 <tr><td colSpan={6} className="snack-empty">Cargando usuarios…</td></tr>
               ) : users.length === 0 ? (
-                <tr><td colSpan={6} className="snack-empty">Todavía no hay guías o coordinadores registrados.</td></tr>
+                <tr><td colSpan={6} className="snack-empty">Todavía no hay usuarios registrados.</td></tr>
               ) : users.map((user) => (
                 <tr key={user.user_id}>
                   <td><strong>@{user.username || "sin-usuario"}</strong></td>
                   <td>{user.email}</td>
-                  <td>{user.role === "guia" ? "Guía" : user.role === "coordinador" ? "Coordinador" : user.role || "—"}</td>
+                  <td>{roleLabel(user.role)}</td>
                   <td>{formatDate(user.created_at)}</td>
                   <td>{formatDate(user.last_sign_in_at)}</td>
                   <td>
