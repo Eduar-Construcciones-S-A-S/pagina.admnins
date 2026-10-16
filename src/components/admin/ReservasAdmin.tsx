@@ -30,7 +30,7 @@ import {
   Calendar,
   UserCheck,
 } from "lucide-react";
-import { calcularTotalPlan } from "../../services/planTarifa.service";
+import { calcularPrecioPlan, calcularTotalPlan } from "../../services/planTarifa.service";
 import ReservationApprovalModal from "../common/ReservationApprovalModal";
 import LargeGroupExcelImport, { type ImportedGroupParticipant } from "./LargeGroupExcelImport";
 import "../../styles/reservas.css";
@@ -485,7 +485,7 @@ export default function ReservasAdmin() {
   const validateParticipants = () => {
     if (formData.id_plan === "") return "Selecciona un plan.";
     if (!formData.fecha_visita) return "Selecciona la fecha de la visita.";
-    if (!formData.hora_visita) return "Selecciona la hora de la visita.";
+    if (selectedPlan?.tipo_hora !== "sin_hora" && !formData.hora_visita) return "Selecciona la hora de la visita.";
     if (isLargeGroup && Number(formData.cantidad_personas) < 31) {
       return "Para usar Grupo grande registra al menos 31 personas.";
     }
@@ -559,21 +559,38 @@ export default function ReservasAdmin() {
         return;
       }
 
-      const idFecha = await getOrCreatePlanFecha(Number(formData.id_plan), formData.fecha_visita);
-      const idHora = await getOrCreatePlanHora(Number(formData.id_plan), formData.hora_visita);
-      const fechaReserva = `${formData.fecha_visita}T${formData.hora_visita}:00`;
-      const buggyReservationFields = isBuggyPlan && buggyPricing
+      const selectedPlanId = Number(formData.id_plan);
+      const participantCount = Math.max(1, Number(formData.cantidad_personas) || 1);
+      const idFecha = await getOrCreatePlanFecha(selectedPlanId, formData.fecha_visita);
+      const idHora = selectedPlan?.tipo_hora === "sin_hora"
+        ? null
+        : await getOrCreatePlanHora(selectedPlanId, formData.hora_visita);
+      const fechaReserva = selectedPlan?.tipo_hora === "sin_hora"
+        ? `${formData.fecha_visita}T00:00:00`
+        : `${formData.fecha_visita}T${formData.hora_visita}:00`;
+
+      const [standardUnitPrice, standardTotal] = isBuggyPlan
+        ? [0, 0]
+        : await Promise.all([
+            calcularPrecioPlan(selectedPlanId, participantCount, formData.fecha_visita),
+            calcularTotalPlan(selectedPlanId, participantCount, formData.fecha_visita),
+          ]);
+
+      if (!isBuggyPlan && (!Number.isFinite(standardUnitPrice) || standardUnitPrice <= 0 || !Number.isFinite(standardTotal) || standardTotal <= 0)) {
+        throw new Error("No fue posible calcular el valor del plan seleccionado para esta cantidad de personas.");
+      }
+
+      const pricingFields = isBuggyPlan && buggyPricing
         ? {
             precio_unitario: buggyPricing.averageUnitPrice,
             valor_total: buggyPricing.totalPrice,
-            valor_abonado: Math.round(buggyPricing.totalPrice * 0.3),
             observacion: JSON.stringify({
               tipo: "configuracion_buggy",
               version: 1,
               ruta: selectedPlan?.nombre_plan ?? null,
               grupo: selectedParentPlan?.nombre_plan ?? "Buggys",
               cantidad_buggies: buggyCount,
-              cantidad_personas: Number(formData.cantidad_personas),
+              cantidad_personas: participantCount,
               buggies_individuales: buggyPricing.singleBuggies,
               buggies_dobles: buggyPricing.doubleBuggies,
               tarifa_buggy_individual: buggyPricing.singlePrice,
@@ -581,20 +598,27 @@ export default function ReservasAdmin() {
               total_aplicado: buggyPricing.totalPrice,
             }),
           }
-        : {};
+        : {
+            precio_unitario: standardUnitPrice,
+            valor_total: standardTotal,
+          };
 
       if (editing) {
-        await updateReserva(editing.id_reserva, {
+        const updatedReserva = await updateReserva(editing.id_reserva, {
           telefono_cliente: clientPhone,
-          id_plan: Number(formData.id_plan),
+          id_plan: selectedPlanId,
           id_fecha: idFecha,
           id_hora: idHora,
           fecha_reserva: fechaReserva,
-          cantidad_personas: Number(formData.cantidad_personas),
+          cantidad_personas: participantCount,
           aprobado: formData.aprobado,
           fecha_aprobacion,
-          ...buggyReservationFields,
+          ...pricingFields,
         });
+
+        if (Number(updatedReserva?.id_plan) !== selectedPlanId) {
+          throw new Error("El cambio de plan no quedó guardado. Intenta nuevamente.");
+        }
 
         if (isLargeGroup && groupImportDirty) {
           const currentParticipants: Participante[] = await getParticipantesPorReserva(editing.id_reserva);
@@ -622,14 +646,17 @@ export default function ReservasAdmin() {
 
         const created = await createReserva({
           telefono_cliente: clientPhone,
-          id_plan: Number(formData.id_plan),
+          id_plan: selectedPlanId,
           id_fecha: idFecha,
           id_hora: idHora,
           fecha_reserva: fechaReserva,
-          cantidad_personas: Number(formData.cantidad_personas),
+          cantidad_personas: participantCount,
           aprobado: formData.aprobado,
           fecha_aprobacion,
-          ...buggyReservationFields,
+          ...pricingFields,
+          ...(isBuggyPlan && buggyPricing
+            ? { valor_abonado: Math.round(buggyPricing.totalPrice * 0.3) }
+            : {}),
         });
 
         for (let i = 0; i < participantsToSave.length; i++) {
