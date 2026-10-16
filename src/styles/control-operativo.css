@@ -8,14 +8,24 @@
 /* Mapa definitivo de columnas del Control Operativo.
    La tabla tiene un ancho exacto igual a la suma de sus 28 columnas para evitar
    zonas blancas internas al desplazarse horizontalmente. */
+.op-table-inner{
+  width:3091px;
+  min-width:3091px;
+  max-width:3091px;
+  overflow:hidden;
+}
 .op-table-operational{
-  width:3091px!important;
-  min-width:3091px!important;
-  max-width:3091px!important;
+  width:100%!important;
+  min-width:0!important;
+  max-width:none!important;
   table-layout:fixed!important;
 }
 .op-table-operational th,
 .op-table-operational td{
+  position:static!important;
+  left:auto!important;
+  z-index:auto!important;
+  box-shadow:none!important;
   box-sizing:border-box;
   overflow:hidden;
   text-overflow:ellipsis;
