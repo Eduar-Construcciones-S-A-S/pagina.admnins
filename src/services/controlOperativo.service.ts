@@ -305,13 +305,14 @@ export async function registrarDevolucionReserva(args:{id_reserva:number;monto:n
 
 export async function replaceAbonoPagos(
   idReserva:number,
-  pagos:Array<{monto:number;medio_pago:string;referencia?:string|null}>
+  pagos:Array<{monto:number;medio_pago:string;referencia?:string|null;fecha_abono?:string|null}>
 ){
   const validos=pagos
     .map((p)=>({
       monto:num(p.monto),
       medio_pago:text(p.medio_pago).trim(),
       referencia:text(p.referencia).trim().toUpperCase(),
+      fecha_abono:text(p.fecha_abono).trim(),
     }))
     .filter((p)=>p.monto>0&&p.medio_pago);
 
@@ -331,6 +332,7 @@ export async function replaceAbonoPagos(
         tipo_pago:"abono",
         monto:p.monto,
         medio_pago:p.medio_pago,
+        fecha_pago:p.fecha_abono||undefined,
         observacion:p.referencia?("Referencia abono: "+p.referencia):null,
       })));
     if(insertError)throw insertError;
