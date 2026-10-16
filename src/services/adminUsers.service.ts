@@ -5,7 +5,7 @@ function client() {
   return supabase;
 }
 
-export type ManagedUserRole = "guia" | "coordinador";
+export type ManagedUserRole = "administrador" | "atencion" | "coordinador" | "guia";
 
 export type ManagedUser = {
   user_id: string;
