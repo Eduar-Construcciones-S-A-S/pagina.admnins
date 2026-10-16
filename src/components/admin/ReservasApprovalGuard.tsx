@@ -25,6 +25,14 @@ import {
   type ReservaAdicional,
   type ReservaAdicionalInput,
 } from "../../services/adicional.service";
+import {
+  agregarPlanAdicionalReserva,
+  calcularImpactoPlanAdicional,
+  getOpcionesPlanesAdicionales,
+  getReservaPlanesAdicionales,
+  retirarPlanAdicionalReserva,
+  type OpcionPlanAdicional,
+} from "../../services/reservaPlanAdicional.service";
 
 type ReservaLite = {
   id_reserva: number;
@@ -40,6 +48,7 @@ type ReservaLite = {
   referencia_pago_abono?: string | null;
   observacion?: string | null;
   nombre_plan?: string | null;
+  fecha_reserva?: string | null;
 };
 
 type AdvancedOption = "" | "refrigerio" | "adicionales" | "valor_total" | "valor_unitario";
@@ -72,6 +81,8 @@ export default function ReservasApprovalGuard() {
   const [adicionalCantidad, setAdicionalCantidad] = useState<Record<number, number>>({});
   const [incluirAdicionales, setIncluirAdicionales] = useState(false);
   const [reservaAdicionalesOriginales, setReservaAdicionalesOriginales] = useState<ReservaAdicional[]>([]);
+  const [planesAdicionalesDisponibles, setPlanesAdicionalesDisponibles] = useState<OpcionPlanAdicional[]>([]);
+  const [planAdicionalCantidad, setPlanAdicionalCantidad] = useState<Record<string, number>>({});
   const [selected, setSelected] = useState<ReservaLite | null>(null);
   const [abonos, setAbonos] = useState<AbonoSplit[]>([
     { monto: "", metodoPago: "", referencia: "", fechaAbono: todayLocal() },
@@ -182,7 +193,22 @@ export default function ReservasApprovalGuard() {
     const unitario = Number(reserva.precio_unitario || (total > 0 ? total / cantidad : 0));
 
     const adicionalesPlan = planAdicionales.filter((item) => Number(item.id_plan) === Number(reserva.id_plan) && item.activo && item.adicional.activo);
-    const existentes = await getReservaAdicionales(reserva.id_reserva).catch(() => [] as ReservaAdicional[]);
+    const [existentes, opcionesPlanExtra, planesExtraExistentes] = await Promise.all([
+      getReservaAdicionales(reserva.id_reserva).catch(() => [] as ReservaAdicional[]),
+      getOpcionesPlanesAdicionales(reserva.id_plan).catch(() => [] as OpcionPlanAdicional[]),
+      getReservaPlanesAdicionales(reserva.id_reserva).catch(() => []),
+    ]);
+    const planesYaAgregados = new Set(
+      planesExtraExistentes
+        .filter((item) => item.origen === "plan" && item.id_plan_adicional != null)
+        .map((item) => Number(item.id_plan_adicional)),
+    );
+    const planesDisponibles = opcionesPlanExtra.filter(
+      (opcion) =>
+        opcion.origen === "plan" &&
+        opcion.id_plan != null &&
+        !planesYaAgregados.has(Number(opcion.id_plan)),
+    );
     const cantidades = Object.fromEntries(adicionalesPlan.map((item) => {
       const max = maxCantidadPlanAdicional(item, cantidad);
       const existing = existentes.find((row) => Number(row.id_adicional) === Number(item.id_adicional));
@@ -205,6 +231,8 @@ export default function ReservasApprovalGuard() {
     setSelected(reserva);
     setAbonos([{ monto: "", metodoPago: "", referencia: "", fechaAbono: todayLocal() }]);
     setReservaAdicionalesOriginales(existentes);
+    setPlanesAdicionalesDisponibles(planesDisponibles);
+    setPlanAdicionalCantidad({});
     setAdicionalCantidad(cantidades);
     setIncluirAdicionales(existentes.some((row) => row.tipo_movimiento === "agregado" && Number(row.cantidad_aplicada || 0) > 0));
     setIncluyeAlmuerzo(lunch ? Number(cantidades[lunch.id_adicional] || 0) > 0 : false);
@@ -224,6 +252,8 @@ export default function ReservasApprovalGuard() {
       setSelected(null);
       setAdicionalCantidad({});
       setReservaAdicionalesOriginales([]);
+      setPlanesAdicionalesDisponibles([]);
+      setPlanAdicionalCantidad({});
       setIncluirAdicionales(false);
     }
   };
