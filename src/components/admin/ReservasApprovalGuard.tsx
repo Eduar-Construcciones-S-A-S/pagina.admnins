@@ -999,17 +999,17 @@ export default function ReservasApprovalGuard() {
 
             {advancedOption === "adicionales" && (
               <div style={{ display: "grid", gap: 10 }}>
-                {(adicionalesDelPlan.length > 0 || adicionalesLibres.length > 0) ? (
+                {(adicionalesDelPlan.length > 0 || adicionalesLibres.length > 0 || planesAdicionalesDisponibles.length > 0) ? (
                   <div style={{ border: "1px solid #e4ddd4", borderRadius: 14, padding: 14, background: "#fff" }}>
                     <div style={{ marginBottom: 12 }}>
-                      <strong style={{ display: "block", fontSize: 15 }}>Adicionales de la reserva</strong>
+                      <strong style={{ display: "block", fontSize: 15 }}>Adicionales y planes adicionales</strong>
                       <small style={{ color: "#81776c" }}>
-                        Los adicionales opcionales que selecciones se sumarán automáticamente al valor total antes de aprobar.
+                        Puedes agregar servicios del catálogo o incluso otro plan. Todo lo seleccionado se suma automáticamente al valor total antes de aprobar.
                       </small>
                     </div>
 
                     <div className="rv-form-group" style={{ marginBottom: 12 }}>
-                      <label>¿Deseas incluir adicionales?</label>
+                      <label>¿Deseas incluir adicionales del catálogo?</label>
                       <select
                         value={incluirAdicionales ? "si" : "no"}
                         onChange={(e) => {
@@ -1183,6 +1183,96 @@ export default function ReservasApprovalGuard() {
                       })}
                     </>
                   )}
+
+                  {planesAdicionalesDisponibles.length > 0 && (
+                    <>
+                      <div style={{ margin: "8px 0 2px", paddingTop: 10, borderTop: "1px solid #e4ddd4" }}>
+                        <strong style={{ display: "block", fontSize: 13, color: "#5b5147" }}>
+                          Planes adicionales disponibles
+                        </strong>
+                        <small style={{ color: "#82786d" }}>
+                          Selecciona cuántas personas tomarán cada plan adicional. Puedes agregar más de uno en la misma reserva.
+                        </small>
+                      </div>
+
+                      {planesAdicionalesDisponibles.map((opcion) => {
+                        const personas = Math.min(
+                          cantidadSeleccionada,
+                          Math.max(0, Math.floor(Number(planAdicionalCantidad[opcion.key] || 0))),
+                        );
+                        const calculo = personas > 0
+                          ? calcularImpactoPlanAdicional(
+                              opcion,
+                              personas,
+                              String(selected?.fecha_reserva ?? "").slice(0, 10),
+                            )
+                          : null;
+
+                        return (
+                          <div
+                            key={opcion.key}
+                            style={{
+                              display: "grid",
+                              gap: 8,
+                              padding: "10px 11px",
+                              border: "1px solid #dfe8e2",
+                              borderRadius: 10,
+                              background: personas > 0 ? "#f6fbf8" : "#fff",
+                            }}
+                          >
+                            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+                              <span style={{ minWidth: 0 }}>
+                                <strong style={{ display: "block" }}>{opcion.nombre}</strong>
+                                <small style={{ color: "#82786d", display: "block" }}>
+                                  Plan adicional · {opcion.tipo_cobro === "por_persona" ? "cobro por persona" : "cobro por reserva"}
+                                </small>
+                                {opcion.descripcion && (
+                                  <small style={{ color: "#9a8f82", display: "block", marginTop: 2 }}>
+                                    {opcion.descripcion}
+                                  </small>
+                                )}
+                              </span>
+                              <strong style={{ color: calculo && calculo.impacto_total > 0 ? "#2f765b" : "#82786d", whiteSpace: "nowrap" }}>
+                                {calculo && calculo.impacto_total > 0 ? "+" : ""}{formatMoney(calculo?.impacto_total ?? 0)}
+                              </strong>
+                            </div>
+
+                            <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                              <small style={{ color: "#6f665d", fontWeight: 700 }}>Personas que tomarán este plan</small>
+                              <select
+                                value={personas}
+                                disabled={saving}
+                                onChange={(e) => {
+                                  const value = Math.min(
+                                    cantidadSeleccionada,
+                                    Math.max(0, Math.floor(Number(e.target.value) || 0)),
+                                  );
+                                  setPlanAdicionalCantidad((current) => ({
+                                    ...current,
+                                    [opcion.key]: value,
+                                  }));
+                                  setError(null);
+                                }}
+                              >
+                                <option value={0}>No agregar</option>
+                                {Array.from({ length: cantidadSeleccionada }, (_, index) => index + 1).map((value) => (
+                                  <option key={value} value={value}>
+                                    {value} / {cantidadSeleccionada}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+
+                            {calculo && (
+                              <small style={{ color: "#6f665d" }}>
+                                {calculo.detalle}
+                              </small>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </>
+                  )}
                   </div>
                   </div>
                 ) : (
@@ -1194,7 +1284,7 @@ export default function ReservasApprovalGuard() {
                     color: "#81776c",
                     fontSize: 13,
                   }}>
-                    No hay adicionales activos registrados en el catálogo.
+                    No hay adicionales ni planes adicionales activos disponibles para esta reserva.
                   </div>
                 )}
               </div>
