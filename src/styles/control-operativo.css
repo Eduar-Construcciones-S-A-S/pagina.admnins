@@ -9,7 +9,7 @@
    La tabla tiene un ancho exacto igual a la suma de sus 28 columnas para evitar
    zonas blancas internas al desplazarse horizontalmente. */
 .op-table-wrap{
-  --op-observation-width:clamp(240px,28vw,420px);
+  --op-observation-width:clamp(320px,34vw,520px);
 }
 .op-table-inner{
   width:calc(2861px + var(--op-observation-width));
@@ -100,12 +100,16 @@
   min-width:var(--op-observation-width)!important;
   max-width:var(--op-observation-width)!important;
   white-space:normal!important;
-  overflow-wrap:anywhere;
-  word-break:break-word;
-  line-height:1.35;
+  overflow-wrap:anywhere!important;
+  word-break:break-word!important;
+  line-height:1.45;
   text-align:left!important;
-  overflow:visible!important;
+  vertical-align:top!important;
+  overflow:hidden!important;
   text-overflow:clip!important;
+  height:auto!important;
+  padding-top:10px!important;
+  padding-bottom:10px!important;
 }
 
 /* Mantener Observación y Acciones visibles al final del Control Operativo. */
@@ -116,6 +120,9 @@
   z-index:6!important;
   background:#fff!important;
   box-shadow:-5px 0 12px -12px rgba(31,25,18,.55);
+  white-space:normal!important;
+  overflow-wrap:anywhere!important;
+  word-break:break-word!important;
 }
 .op-table-operational th:nth-child(28),
 .op-table-operational td:nth-child(28){
