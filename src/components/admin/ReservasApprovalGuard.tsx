@@ -1233,7 +1233,7 @@ export default function ReservasApprovalGuard() {
                                 )}
                               </span>
                               <strong style={{ color: calculo && calculo.impacto_total > 0 ? "#2f765b" : "#82786d", whiteSpace: "nowrap" }}>
-                                {calculo && calculo.impacto_total > 0 ? "+" : ""}{formatMoney(calculo?.impacto_total ?? 0)}
+                                {calculo && calculo.impacto_total > 0 ? "+" : ""}${formatMoney(calculo?.impacto_total ?? 0)}
                               </strong>
                             </div>
 
