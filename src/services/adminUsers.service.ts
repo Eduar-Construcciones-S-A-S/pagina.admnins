@@ -45,6 +45,15 @@ export async function createManagedUser(username: string, email: string, passwor
   });
 }
 
+export async function updateManagedUserProfile(userId: string, username: string, email: string) {
+  return invokeAdminUsers({
+    action: "update_profile",
+    user_id: userId,
+    username: username.trim().toLowerCase(),
+    email: email.trim().toLowerCase(),
+  });
+}
+
 export async function resetManagedUserPassword(userId: string, password: string) {
   return invokeAdminUsers({
     action: "reset_password",
