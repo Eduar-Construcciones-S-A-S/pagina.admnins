@@ -433,16 +433,39 @@ export default function ReservasApprovalGuard() {
 
     const movimientosAdicionalesFinales = [...movimientosAdicionales, ...movimientosAdicionalesLibres];
     const impactoAdicionales = movimientosAdicionalesFinales.reduce((total, item) => total + Number(item.impacto_total || 0), 0);
-    const totalNuevo = advancedOption === "valor_total"
+
+    const planesParaAgregar = planesAdicionalesDisponibles.flatMap((opcion) => {
+      const personas = Math.min(
+        cantidad,
+        Math.max(0, Math.floor(Number(planAdicionalCantidad[opcion.key] || 0))),
+      );
+      if (personas <= 0) return [];
+      const calculo = calcularImpactoPlanAdicional(
+        opcion,
+        personas,
+        String(selected.fecha_reserva ?? "").slice(0, 10),
+      );
+      if (!Number.isFinite(calculo.impacto_total) || calculo.impacto_total <= 0) return [];
+      return [{ opcion, personas, calculo }];
+    });
+
+    const impactoPlanesAdicionales = planesParaAgregar.reduce(
+      (total, item) => total + Number(item.calculo.impacto_total || 0),
+      0,
+    );
+
+    const totalSinPlanesAdicionales = advancedOption === "valor_total"
       ? parseMoney(valorTotal)
       : advancedOption === "valor_unitario"
         ? parseMoney(valorUnitario) * cantidad
         : totalBaseOriginal + impactoAdicionales;
+    const totalNuevo = totalSinPlanesAdicionales + impactoPlanesAdicionales;
+    const unitarioSinPlanesAdicionales = totalSinPlanesAdicionales / cantidad;
     const unitarioNuevo = totalNuevo / cantidad;
     const ajusteMonetario = advancedOption === "valor_total"
-      ? Math.abs(totalNuevo - totalOriginal) > 0.01
+      ? Math.abs(totalSinPlanesAdicionales - totalOriginal) > 0.01
       : advancedOption === "valor_unitario"
-        ? Math.abs(unitarioNuevo - unitarioOriginal) > 0.01
+        ? Math.abs(unitarioSinPlanesAdicionales - unitarioOriginal) > 0.01
         : false;
 
     if (!Number.isFinite(valor) || valor <= 0) {
@@ -498,6 +521,7 @@ export default function ReservasApprovalGuard() {
     setError(null);
 
     let reservaActualizada = false;
+    const planesAgregadosEnIntento: number[] = [];
     try {
       const patch: Record<string, unknown> = {
         refrigerio: incluyeRefrigerio,
@@ -505,14 +529,29 @@ export default function ReservasApprovalGuard() {
       };
 
       if (ajusteMonetario || Math.abs(impactoAdicionales - impactoOriginal) > 0.01) {
-        patch.valor_total = totalNuevo;
-        patch.precio_unitario = unitarioNuevo;
+        patch.valor_total = totalSinPlanesAdicionales;
+        patch.precio_unitario = unitarioSinPlanesAdicionales;
         if (ajusteMonetario) patch.observacion = observacion.trim();
       }
 
       await updateReserva(selected.id_reserva, patch);
       reservaActualizada = true;
       await replaceReservaAdicionales(selected.id_reserva, movimientosAdicionalesFinales);
+
+      for (const item of planesParaAgregar) {
+        const result = await agregarPlanAdicionalReserva({
+          id_reserva: selected.id_reserva,
+          opcion: item.opcion,
+          cantidad_personas: item.personas,
+          aplica_todos: item.personas === cantidad,
+          precio_unitario: item.calculo.precio_unitario,
+          impacto_total: item.calculo.impacto_total,
+        });
+        if (result.id_reserva_plan_adicional) {
+          planesAgregadosEnIntento.push(result.id_reserva_plan_adicional);
+        }
+      }
+
       await replaceAbonoPagos(selected.id_reserva, pagosAbono);
 
       await aprobarReservaOperativa({
@@ -528,6 +567,16 @@ export default function ReservasApprovalGuard() {
       window.location.reload();
     } catch (e: any) {
       console.error(e);
+
+      if (planesAgregadosEnIntento.length) {
+        for (const id of [...planesAgregadosEnIntento].reverse()) {
+          try {
+            await retirarPlanAdicionalReserva(id);
+          } catch (rollbackPlanError) {
+            console.error("No se pudo retirar un plan adicional durante la reversión:", rollbackPlanError);
+          }
+        }
+      }
 
       if (reservaActualizada) {
         try {
@@ -576,12 +625,30 @@ export default function ReservasApprovalGuard() {
       }, 0)
     : 0;
   const impactoAdicionalesTotalVista = impactoAdicionalesVista + impactoAdicionalesLibresVista;
+  const planesAdicionalesSeleccionadosVista = planesAdicionalesDisponibles.flatMap((opcion) => {
+    const personas = Math.min(
+      cantidadSeleccionada,
+      Math.max(0, Math.floor(Number(planAdicionalCantidad[opcion.key] || 0))),
+    );
+    if (personas <= 0) return [];
+    const calculo = calcularImpactoPlanAdicional(
+      opcion,
+      personas,
+      String(selected?.fecha_reserva ?? "").slice(0, 10),
+    );
+    return [{ opcion, personas, calculo }];
+  });
+  const impactoPlanesAdicionalesVista = planesAdicionalesSeleccionadosVista.reduce(
+    (total, item) => total + Number(item.calculo.impacto_total || 0),
+    0,
+  );
 
-  const totalVista = advancedOption === "valor_unitario"
+  const totalBaseVista = advancedOption === "valor_unitario"
     ? parseMoney(valorUnitario) * cantidadSeleccionada
     : advancedOption === "valor_total"
       ? parseMoney(valorTotal)
       : totalBaseOriginalVista + impactoAdicionalesTotalVista;
+  const totalVista = totalBaseVista + impactoPlanesAdicionalesVista;
   const unitarioVista = totalVista / cantidadSeleccionada;
 
   return <>
