@@ -1,6 +1,8 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
+const MANAGED_ROLES = ["administrador", "atencion", "coordinador", "guia"] as const;
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -128,7 +130,7 @@ Deno.serve(async (req: Request) => {
           created_at: user.created_at ?? "",
           last_sign_in_at: user.last_sign_in_at ?? null,
         }))
-        .filter((user) => user.role === "guia" || user.role === "coordinador")
+        .filter((user) => MANAGED_ROLES.includes(user.role as (typeof MANAGED_ROLES)[number]))
         .sort((a, b) => a.email.localeCompare(b.email, "es"));
 
       return json({ users });
@@ -162,8 +164,8 @@ Deno.serve(async (req: Request) => {
         return json({ error: "La contraseña debe tener mínimo 8 caracteres." }, 400);
       }
 
-      if (!["guia", "coordinador"].includes(role)) {
-        return json({ error: "Solo se pueden crear usuarios con rol Guía o Coordinador." }, 400);
+      if (!MANAGED_ROLES.includes(role as (typeof MANAGED_ROLES)[number])) {
+        return json({ error: "Selecciona un rol válido para el usuario." }, 400);
       }
 
       const { data: targetRole, error: targetRoleError } = await admin
@@ -265,8 +267,8 @@ Deno.serve(async (req: Request) => {
         .maybeSingle();
 
       if (assignedRoleError) throw assignedRoleError;
-      if (!["guia", "coordinador"].includes(String(assignedRole?.nombre ?? ""))) {
-        return json({ error: "Esta pantalla solo administra perfiles de guías y coordinadores." }, 400);
+      if (!MANAGED_ROLES.includes(String(assignedRole?.nombre ?? "") as (typeof MANAGED_ROLES)[number])) {
+        return json({ error: "El usuario no tiene un rol válido de la aplicación." }, 400);
       }
 
       const { error: authUpdateError } = await admin.auth.admin.updateUserById(userId, {
@@ -323,8 +325,8 @@ Deno.serve(async (req: Request) => {
         .maybeSingle();
 
       if (assignedRoleError) throw assignedRoleError;
-      if (!["guia", "coordinador"].includes(String(assignedRole?.nombre ?? ""))) {
-        return json({ error: "Esta pantalla solo administra contraseñas de guías y coordinadores." }, 400);
+      if (!MANAGED_ROLES.includes(String(assignedRole?.nombre ?? "") as (typeof MANAGED_ROLES)[number])) {
+        return json({ error: "El usuario no tiene un rol válido de la aplicación." }, 400);
       }
 
       const { error: updateError } = await admin.auth.admin.updateUserById(userId, {
