@@ -902,7 +902,7 @@ export default function ReservasApprovalGuard() {
 
             {advancedOption === "adicionales" && (
               <div style={{ display: "grid", gap: 10 }}>
-                {adicionalesDelPlan.length > 0 ? (
+                {(adicionalesDelPlan.length > 0 || adicionalesLibres.length > 0) ? (
                   <div style={{ border: "1px solid #e4ddd4", borderRadius: 14, padding: 14, background: "#fff" }}>
                     <div style={{ marginBottom: 12 }}>
                       <strong style={{ display: "block", fontSize: 15 }}>Adicionales de la reserva</strong>
@@ -957,6 +957,17 @@ export default function ReservasApprovalGuard() {
                     </div>
 
                     <div style={{ display: "grid", gap: 9 }}>
+                  {adicionalesDelPlan.length > 0 && (
+                    <div style={{ margin: "2px 0 4px" }}>
+                      <strong style={{ display: "block", fontSize: 13, color: "#5b5147" }}>
+                        Adicionales configurados para este plan
+                      </strong>
+                      <small style={{ color: "#82786d" }}>
+                        Aquí aparecen los servicios incluidos u opcionales vinculados directamente al plan.
+                      </small>
+                    </div>
+                  )}
+
                   {adicionalesDelPlan.map((item) => {
                     const max = maxCantidadPlanAdicional(item, cantidadSeleccionada);
                     const quantity = normalizarCantidadPlanAdicional(
@@ -1000,33 +1011,45 @@ export default function ReservasApprovalGuard() {
                     );
                   })}
 
-                  {incluirAdicionales && adicionalesLibres.length > 0 && (
+                  {adicionalesLibres.length > 0 && (
                     <>
-                      <div style={{ margin: "5px 0 2px", paddingTop: 8, borderTop: "1px solid #eee7de" }}>
+                      <div style={{ margin: "5px 0 2px", paddingTop: 8, borderTop: adicionalesDelPlan.length ? "1px solid #eee7de" : "none" }}>
                         <strong style={{ display: "block", fontSize: 13, color: "#5b5147" }}>
-                          Otros adicionales disponibles
+                          Todos los demás adicionales disponibles
                         </strong>
                         <small style={{ color: "#82786d" }}>
-                          Puedes agregar cualquiera de estos servicios aunque no venga incluido originalmente en el plan.
+                          Esta lista muestra todos los adicionales activos del catálogo, aunque no estén vinculados originalmente al plan.
                         </small>
                       </div>
 
                       {adicionalesLibres.map((item) => {
                         const perPerson = item.tipo_cobro === "por_persona";
                         const max = perPerson ? cantidadSeleccionada : 1;
-                        const quantity = Math.min(
-                          max,
-                          Math.max(0, Math.floor(Number(adicionalCantidad[item.id_adicional] || 0))),
-                        );
+                        const quantity = incluirAdicionales
+                          ? Math.min(
+                              max,
+                              Math.max(0, Math.floor(Number(adicionalCantidad[item.id_adicional] || 0))),
+                            )
+                          : 0;
                         const impacto = Number(item.precio || 0) * quantity;
 
                         return (
-                          <div key={`libre-${item.id_adicional}`} style={{ display: "grid", gap: 8, padding: "10px 11px", border: "1px solid #eee7de", borderRadius: 10 }}>
+                          <div
+                            key={`libre-${item.id_adicional}`}
+                            style={{
+                              display: "grid",
+                              gap: 8,
+                              padding: "10px 11px",
+                              border: "1px solid #eee7de",
+                              borderRadius: 10,
+                              opacity: incluirAdicionales ? 1 : 0.72,
+                            }}
+                          >
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
                               <span>
                                 <strong style={{ display: "block" }}>{item.nombre}</strong>
                                 <small style={{ color: "#82786d" }}>
-                                  Opcional · ${formatMoney(item.precio)} {perPerson ? "por persona" : "por reserva"}
+                                  Catálogo general · Opcional · ${formatMoney(item.precio)} {perPerson ? "por persona" : "por reserva"}
                                 </small>
                               </span>
                               <strong style={{ color: impacto > 0 ? "#2f765b" : "#82786d", whiteSpace: "nowrap" }}>
@@ -1037,7 +1060,11 @@ export default function ReservasApprovalGuard() {
                             {perPerson ? (
                               <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
                                 <small style={{ color: "#6f665d", fontWeight: 700 }}>Personas que lo quieren</small>
-                                <select value={quantity} disabled={saving} onChange={(e) => setCantidadAdicionalLibre(item, Number(e.target.value))}>
+                                <select
+                                  value={quantity}
+                                  disabled={saving || !incluirAdicionales}
+                                  onChange={(e) => setCantidadAdicionalLibre(item, Number(e.target.value))}
+                                >
                                   {Array.from({ length: max + 1 }, (_, value) => (
                                     <option key={value} value={value}>{value} / {max}</option>
                                   ))}
@@ -1049,7 +1076,7 @@ export default function ReservasApprovalGuard() {
                                 <input
                                   type="checkbox"
                                   checked={quantity > 0}
-                                  disabled={saving}
+                                  disabled={saving || !incluirAdicionales}
                                   onChange={(e) => setCantidadAdicionalLibre(item, e.target.checked ? 1 : 0)}
                                 />
                               </label>
@@ -1070,7 +1097,7 @@ export default function ReservasApprovalGuard() {
                     color: "#81776c",
                     fontSize: 13,
                   }}>
-                    Este plan no tiene adicionales configurados.
+                    No hay adicionales activos registrados en el catálogo.
                   </div>
                 )}
               </div>
