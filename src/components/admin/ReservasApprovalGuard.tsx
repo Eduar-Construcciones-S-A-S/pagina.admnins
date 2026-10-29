@@ -577,7 +577,8 @@ export default function ReservasApprovalGuard() {
     }
     if (almuerzoAdicionalActivo && !movimientosAdicionalesFinales.some((item) =>
       item.codigo_adicional === "almuerzo" && item.tipo_movimiento === "agregado" &&
-      item.cantidad_aplicada > 0 && item.impacto_total > 0
+      item.cantidad_aplicada === cantidadAlmuerzosAdicionales &&
+      item.impacto_total > 0 && item.precio_unitario > 0
     )) {
       setError("El almuerzo adicional debe cobrarse antes de aprobar la reserva.");
       return;
