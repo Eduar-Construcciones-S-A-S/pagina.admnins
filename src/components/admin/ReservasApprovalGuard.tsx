@@ -281,7 +281,6 @@ export default function ReservasApprovalGuard() {
       if (Object.prototype.hasOwnProperty.call(cantidades, existing.id_adicional)) continue;
       cantidades[Number(existing.id_adicional)] = Math.max(0, Number(existing.cantidad_aplicada || 0));
     }
-    const lunch = adicionalesPlan.find((item) => item.adicional.codigo === "almuerzo");
 
     setSelected(reserva);
     setAbonos([{ monto: "", metodoPago: "", referencia: "", fechaAbono: todayLocal() }]);
