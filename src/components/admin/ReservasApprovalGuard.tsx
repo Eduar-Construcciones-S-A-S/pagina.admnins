@@ -90,7 +90,6 @@ export default function ReservasApprovalGuard() {
   const [abonos, setAbonos] = useState<AbonoSplit[]>([
     { monto: "", metodoPago: "", referencia: "", fechaAbono: todayLocal() },
   ]);
-  const [incluyeAlmuerzo, setIncluyeAlmuerzo] = useState(false);
   const [restaurante, setRestaurante] = useState("");
   const [menusSeleccionados, setMenusSeleccionados] = useState<(number | "")[]>([]);
   const [menusRestaurante, setMenusRestaurante] = useState<RestauranteMenuItem[]>([]);
@@ -291,7 +290,6 @@ export default function ReservasApprovalGuard() {
     setPlanAdicionalCantidad({});
     setAdicionalCantidad(cantidades);
     setIncluirAdicionales(existentes.some((row) => row.tipo_movimiento === "agregado" && Number(row.cantidad_aplicada || 0) > 0));
-    setIncluyeAlmuerzo(lunch ? Number(cantidades[lunch.id_adicional] || 0) > 0 : Boolean(reserva.incluye_almuerzo));
     setRestaurante("");
     setMenusSeleccionados([]);
     setCodigoId("");
@@ -321,7 +319,6 @@ export default function ReservasApprovalGuard() {
     setAdicionalCantidad((current) => ({ ...current, [item.id_adicional]: normalized }));
     if (item.adicional.codigo === "almuerzo") {
       const hasLunch = normalized > 0;
-      setIncluyeAlmuerzo(hasLunch);
       if (!hasLunch) setRestaurante("");
     }
     setError(null);
@@ -334,7 +331,6 @@ export default function ReservasApprovalGuard() {
     setAdicionalCantidad((current) => ({ ...current, [item.id_adicional]: normalized }));
     if (item.codigo === "almuerzo") {
       const hasLunch = normalized > 0;
-      setIncluyeAlmuerzo(hasLunch);
       if (!hasLunch) setRestaurante("");
     }
     setError(null);
@@ -1113,7 +1109,6 @@ export default function ReservasApprovalGuard() {
                           setIncluirAdicionales(enabled);
                           if (!enabled) {
                             if (!almuerzoConfigurado || almuerzoConfigurado.modalidad === "opcional") {
-                              setIncluyeAlmuerzo(false);
                               setRestaurante("");
                             }
                             setAdicionalCantidad((current) => {
