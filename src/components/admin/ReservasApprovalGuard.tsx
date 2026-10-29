@@ -1061,6 +1061,10 @@ export default function ReservasApprovalGuard() {
                           const enabled = e.target.value === "si";
                           setIncluirAdicionales(enabled);
                           if (!enabled) {
+                            if (!almuerzoConfigurado || almuerzoConfigurado.modalidad === "opcional") {
+                              setIncluyeAlmuerzo(false);
+                              setRestaurante("");
+                            }
                             setAdicionalCantidad((current) => {
                               const next = { ...current };
                               for (const item of adicionalesDelPlan) {
