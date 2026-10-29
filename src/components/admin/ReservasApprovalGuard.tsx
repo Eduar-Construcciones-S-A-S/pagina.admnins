@@ -92,7 +92,7 @@ export default function ReservasApprovalGuard() {
   ]);
   const [incluyeAlmuerzo, setIncluyeAlmuerzo] = useState(false);
   const [restaurante, setRestaurante] = useState("");
-  const [menuAlmuerzoId, setMenuAlmuerzoId] = useState<number | "">("");
+  const [menusSeleccionados, setMenusSeleccionados] = useState<(number | "")[]>([]);
   const [menusRestaurante, setMenusRestaurante] = useState<RestauranteMenuItem[]>([]);
   const [codigoId, setCodigoId] = useState<number | "">("");
   const [advancedOption, setAdvancedOption] = useState<AdvancedOption>("");
@@ -148,6 +148,20 @@ export default function ReservasApprovalGuard() {
       item.codigo === "almuerzo" && Number(adicionalCantidad[item.id_adicional] || 0) > 0
     )
   );
+  const cantidadAlmuerzosIncluidos = adicionalesDelPlan
+    .filter((item) => item.adicional.codigo === "almuerzo" && item.modalidad === "incluido")
+    .reduce((sum, item) => sum + (
+      item.permitir_quitar
+        ? Number(adicionalCantidad[item.id_adicional] ?? maxCantidadPlanAdicional(item, Math.max(1, Number(selected?.cantidad_personas || 1))))
+        : maxCantidadPlanAdicional(item, Math.max(1, Number(selected?.cantidad_personas || 1)))
+    ), 0);
+  const cantidadAlmuerzosAdicionales = incluirAdicionales
+    ? [...adicionalesDelPlan.filter((item) => item.adicional.codigo === "almuerzo" && item.modalidad === "opcional"),
+       ...adicionalesLibres.filter((item) => item.codigo === "almuerzo")]
+        .reduce((sum, item) => sum + Number(adicionalCantidad[item.id_adicional] || 0), 0)
+    : 0;
+  const cantidadAlmuerzos = cantidadAlmuerzosIncluidos + cantidadAlmuerzosAdicionales ||
+    (incluyeAlmuerzo && !almuerzoAdicionalActivo ? Math.max(1, Number(selected?.cantidad_personas || 1)) : 0);
   const almuerzoParaCH = almuerzoAdicionalActivo ? false : incluyeAlmuerzo;
   const restauranteParaCH = almuerzoParaCH ? restaurante : "";
 
@@ -157,7 +171,6 @@ export default function ReservasApprovalGuard() {
   );
 
   useEffect(() => {
-    setMenuAlmuerzoId("");
     setMenusRestaurante([]);
     if (!selected || !restaurante || !incluyeAlmuerzo) return;
     let active = true;
@@ -166,6 +179,12 @@ export default function ReservasApprovalGuard() {
     }).catch((e) => console.warn("No se pudo consultar el menú del restaurante", e));
     return () => { active = false; };
   }, [selected, restaurante, incluyeAlmuerzo]);
+
+  useEffect(() => {
+    setMenusSeleccionados((prev) =>
+      Array.from({ length: cantidadAlmuerzos }, (_, index) => prev[index] ?? "")
+    );
+  }, [cantidadAlmuerzos, selected]);
 
   useEffect(() => {
     if (!selected) return;
@@ -266,7 +285,7 @@ export default function ReservasApprovalGuard() {
     setIncluirAdicionales(existentes.some((row) => row.tipo_movimiento === "agregado" && Number(row.cantidad_aplicada || 0) > 0));
     setIncluyeAlmuerzo(lunch ? Number(cantidades[lunch.id_adicional] || 0) > 0 : Boolean(reserva.incluye_almuerzo));
     setRestaurante("");
-    setMenuAlmuerzoId("");
+    setMenusSeleccionados([]);
     setCodigoId("");
     setAdvancedOption("");
     setIncluyeRefrigerio(true);
@@ -542,6 +561,16 @@ export default function ReservasApprovalGuard() {
       setError("Selecciona el restaurante para la reserva con almuerzo.");
       return;
     }
+    if (cantidadAlmuerzos > 0 && (
+      menusRestaurante.length === 0 ||
+      menusSeleccionados.slice(0, cantidadAlmuerzos).length !== cantidadAlmuerzos ||
+      menusSeleccionados.slice(0, cantidadAlmuerzos).some((id) =>
+        !id || !menusRestaurante.some((item) => item.id_menu === id)
+      )
+    )) {
+      setError("Selecciona un tipo de almuerzo válido para cada almuerzo solicitado.");
+      return;
+    }
     if (!codigoId) {
       setError("No existe un CH configurado para este plan y esta combinación. Vincúlalo primero en Códigos operativos.");
       return;
@@ -598,7 +627,8 @@ export default function ReservasApprovalGuard() {
         await updateReserva(selected.id_reserva, {
           almuerzo_adicional: true,
           restaurante_almuerzo_adicional: restaurante,
-          id_menu_almuerzo_adicional: menuAlmuerzoId || null,
+          id_menu_almuerzo_adicional: menusSeleccionados[0] || null,
+          seleccion_almuerzos: menusSeleccionados.slice(0, cantidadAlmuerzos).map((id_menu, index) => ({ numero: index + 1, id_menu })),
           // Mantiene compatibilidad con el control operativo de almuerzos.
           // El CH ya fue emitido para el plan base y no se vuelve a generar.
           incluye_almuerzo: true,
@@ -609,6 +639,7 @@ export default function ReservasApprovalGuard() {
           almuerzo_adicional: false,
           restaurante_almuerzo_adicional: null,
           id_menu_almuerzo_adicional: null,
+          seleccion_almuerzos: menusSeleccionados.slice(0, cantidadAlmuerzos).map((id_menu, index) => ({ numero: index + 1, id_menu })),
         });
       }
 
@@ -1374,15 +1405,29 @@ export default function ReservasApprovalGuard() {
                 </select>
               </div>
 
-              {incluyeAlmuerzo && (
-                <div className="rv-form-group" style={{ gridColumn: "1 / -1" }}>
-                  <label>Tipo de almuerzo (opcional)</label>
-                  <select value={menuAlmuerzoId} disabled={!restaurante || saving} onChange={(e) => setMenuAlmuerzoId(e.target.value ? Number(e.target.value) : "")}>
-                    <option value="">Sin seleccionar</option>
-                    {menusRestaurante.map((item) => (
-                      <option key={item.id_menu} value={item.id_menu}>{item.nombre_plato}</option>
-                    ))}
-                  </select>
+              {cantidadAlmuerzos > 0 && (
+                <div className="rv-form-group" style={{ gridColumn: "1 / -1", display: "grid", gap: 10 }}>
+                  <label>Tipos de almuerzo ({cantidadAlmuerzos} en total) *</label>
+                  <small>Selecciona el plato para cada almuerzo. Pueden ser diferentes o repetidos.</small>
+                  {Array.from({ length: cantidadAlmuerzos }, (_, index) => (
+                    <label key={index} style={{ display: "grid", gap: 4 }}>
+                      Almuerzo {index + 1}
+                      <select
+                        value={menusSeleccionados[index] ?? ""}
+                        disabled={!restaurante || saving}
+                        onChange={(e) => setMenusSeleccionados((prev) => {
+                          const next = [...prev];
+                          next[index] = e.target.value ? Number(e.target.value) : "";
+                          return next;
+                        })}
+                      >
+                        <option value="">Seleccionar plato</option>
+                        {menusRestaurante.map((item) => (
+                          <option key={item.id_menu} value={item.id_menu}>{item.nombre_plato}</option>
+                        ))}
+                      </select>
+                    </label>
+                  ))}
                 </div>
               )}
 
