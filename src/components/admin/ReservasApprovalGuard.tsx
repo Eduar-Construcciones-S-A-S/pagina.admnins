@@ -599,6 +599,10 @@ export default function ReservasApprovalGuard() {
           almuerzo_adicional: true,
           restaurante_almuerzo_adicional: restaurante,
           id_menu_almuerzo_adicional: menuAlmuerzoId || null,
+          // Mantiene compatibilidad con el control operativo de almuerzos.
+          // El CH ya fue emitido para el plan base y no se vuelve a generar.
+          incluye_almuerzo: true,
+          restaurante,
         });
       } else {
         await updateReserva(selected.id_reserva, {
