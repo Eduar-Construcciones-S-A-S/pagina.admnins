@@ -138,6 +138,13 @@ export default function ReservasApprovalGuard() {
     [adicionalesDelPlan],
   );
 
+  // El plan determina si el almuerzo está incluido. El usuario no puede activarlo gratis.
+  const almuerzoIncluidoPlan = adicionalesDelPlan.some((item) =>
+    item.adicional.codigo === "almuerzo" && item.modalidad === "incluido"
+  ) || Boolean(selected && !adicionalesDelPlan.some((item) => item.adicional.codigo === "almuerzo") &&
+    codigos.some((c) => c.activo && c.id_plan === selected.id_plan && c.incluye_almuerzo) &&
+    !codigos.some((c) => c.activo && c.id_plan === selected.id_plan && !c.incluye_almuerzo));
+
   // El almuerzo opcional no debe modificar el tipo de CH del plan contratado.
   const almuerzoAdicionalActivo = incluirAdicionales && (
     adicionalesDelPlan.some((item) =>
@@ -162,7 +169,7 @@ export default function ReservasApprovalGuard() {
     : 0;
   const cantidadAlmuerzos = cantidadAlmuerzosIncluidos + cantidadAlmuerzosAdicionales ||
     (incluyeAlmuerzo && !almuerzoAdicionalActivo ? Math.max(1, Number(selected?.cantidad_personas || 1)) : 0);
-  const almuerzoParaCH = almuerzoAdicionalActivo ? false : incluyeAlmuerzo;
+  const almuerzoParaCH = almuerzoIncluidoPlan;
   const restauranteParaCH = almuerzoParaCH ? restaurante : "";
 
   const opcionesCH = useMemo(
@@ -172,13 +179,13 @@ export default function ReservasApprovalGuard() {
 
   useEffect(() => {
     setMenusRestaurante([]);
-    if (!selected || !restaurante || !incluyeAlmuerzo) return;
+    if (!selected || !restaurante || cantidadAlmuerzos <= 0) return;
     let active = true;
     getMenusActivosPorRestaurante(restaurante).then((items) => {
       if (active) setMenusRestaurante(items);
     }).catch((e) => console.warn("No se pudo consultar el menú del restaurante", e));
     return () => { active = false; };
-  }, [selected, restaurante, incluyeAlmuerzo]);
+  }, [selected, restaurante, cantidadAlmuerzos]);
 
   useEffect(() => {
     setMenusSeleccionados((prev) =>
@@ -557,18 +564,25 @@ export default function ReservasApprovalGuard() {
       setError("Debes registrar una observación explicando el cambio de valor de la reserva.");
       return;
     }
-    if ((incluyeAlmuerzo || almuerzoAdicionalActivo) && !restaurante) {
+    if (cantidadAlmuerzos > 0 && !restaurante) {
       setError("Selecciona el restaurante para la reserva con almuerzo.");
       return;
     }
-    if (cantidadAlmuerzos > 0 && (
-      menusRestaurante.length === 0 ||
-      menusSeleccionados.slice(0, cantidadAlmuerzos).length !== cantidadAlmuerzos ||
-      menusSeleccionados.slice(0, cantidadAlmuerzos).some((id) =>
-        !id || !menusRestaurante.some((item) => item.id_menu === id)
-      )
+    if (menusSeleccionados.slice(0, cantidadAlmuerzos).some((id) =>
+      id !== "" && !menusRestaurante.some((item) => item.id_menu === id)
     )) {
-      setError("Selecciona un tipo de almuerzo válido para cada almuerzo solicitado.");
+      setError("Uno de los platos seleccionados no corresponde al restaurante.");
+      return;
+    }
+    if (almuerzoAdicionalActivo && !movimientosAdicionalesFinales.some((item) =>
+      item.codigo_adicional === "almuerzo" && item.tipo_movimiento === "agregado" &&
+      item.cantidad_aplicada > 0 && item.impacto_total > 0
+    )) {
+      setError("El almuerzo adicional debe cobrarse antes de aprobar la reserva.");
+      return;
+    }
+    if (Number(codigos.find((item) => item.id_codigo_operativo === Number(codigoId))?.incluye_almuerzo) !== Number(almuerzoIncluidoPlan)) {
+      setError("El CH debe corresponder al almuerzo incluido en el plan original.");
       return;
     }
     if (!codigoId) {
@@ -628,7 +642,7 @@ export default function ReservasApprovalGuard() {
           almuerzo_adicional: true,
           restaurante_almuerzo_adicional: restaurante,
           id_menu_almuerzo_adicional: menusSeleccionados[0] || null,
-          seleccion_almuerzos: menusSeleccionados.slice(0, cantidadAlmuerzos).map((id_menu, index) => ({ numero: index + 1, id_menu })),
+          seleccion_almuerzos: menusSeleccionados.slice(0, cantidadAlmuerzos).map((id_menu, index) => ({ numero: index + 1, id_menu: id_menu || null })),
           // Mantiene compatibilidad con el control operativo de almuerzos.
           // El CH ya fue emitido para el plan base y no se vuelve a generar.
           incluye_almuerzo: true,
@@ -639,7 +653,7 @@ export default function ReservasApprovalGuard() {
           almuerzo_adicional: false,
           restaurante_almuerzo_adicional: null,
           id_menu_almuerzo_adicional: null,
-          seleccion_almuerzos: menusSeleccionados.slice(0, cantidadAlmuerzos).map((id_menu, index) => ({ numero: index + 1, id_menu })),
+          seleccion_almuerzos: menusSeleccionados.slice(0, cantidadAlmuerzos).map((id_menu, index) => ({ numero: index + 1, id_menu: id_menu || null })),
         });
       }
 
@@ -1381,16 +1395,10 @@ export default function ReservasApprovalGuard() {
 
             <div className="rv-approval-grid" style={{ marginTop: 14 }}>
               <div className="rv-form-group">
-                <label>¿Incluye almuerzo? {almuerzoAdicionalActivo ? "(adicional)" : "(plan base)"}</label>
+                <label>¿El plan incluye almuerzo?</label>
                 <select
-                  value={incluyeAlmuerzo ? "si" : "no"}
-                  disabled={!!almuerzoConfigurado || almuerzoAdicionalActivo}
-                  onChange={(e) => {
-                    const value = e.target.value === "si";
-                    setIncluyeAlmuerzo(value);
-                    if (!value) setRestaurante("");
-                    setError(null);
-                  }}
+                  value={almuerzoIncluidoPlan ? "si" : "no"}
+                  disabled
                 >
                   <option value="no">No</option>
                   <option value="si">Sí</option>
@@ -1398,8 +1406,8 @@ export default function ReservasApprovalGuard() {
               </div>
 
               <div className="rv-form-group">
-                <label>Restaurante {incluyeAlmuerzo ? "*" : ""}</label>
-                <select disabled={!incluyeAlmuerzo} value={restaurante} onChange={(e) => { setRestaurante(e.target.value); setError(null); }}>
+                <label>Restaurante {cantidadAlmuerzos > 0 ? "*" : ""}</label>
+                <select disabled={cantidadAlmuerzos === 0} value={restaurante} onChange={(e) => { setRestaurante(e.target.value); setError(null); }}>
                   <option value="">Seleccionar restaurante</option>
                   {restaurantes.map((r) => <option key={r} value={r}>{r}</option>)}
                 </select>
@@ -1407,8 +1415,8 @@ export default function ReservasApprovalGuard() {
 
               {cantidadAlmuerzos > 0 && (
                 <div className="rv-form-group" style={{ gridColumn: "1 / -1", display: "grid", gap: 10 }}>
-                  <label>Tipos de almuerzo ({cantidadAlmuerzos} en total) *</label>
-                  <small>Selecciona el plato para cada almuerzo. Pueden ser diferentes o repetidos.</small>
+                  <label>Tipos de almuerzo ({cantidadAlmuerzos} en total, opcional)</label>
+                  <small>Puedes elegir los platos ahora o confirmar la reserva sin definirlos.</small>
                   {Array.from({ length: cantidadAlmuerzos }, (_, index) => (
                     <label key={index} style={{ display: "grid", gap: 4 }}>
                       Almuerzo {index + 1}
@@ -1421,7 +1429,7 @@ export default function ReservasApprovalGuard() {
                           return next;
                         })}
                       >
-                        <option value="">Seleccionar plato</option>
+                        <option value="">Pendiente por elegir</option>
                         {menusRestaurante.map((item) => (
                           <option key={item.id_menu} value={item.id_menu}>{item.nombre_plato}</option>
                         ))}
