@@ -168,7 +168,8 @@ export default function ReservasApprovalGuard() {
         .reduce((sum, item) => sum + Number(adicionalCantidad[item.id_adicional] || 0), 0)
     : 0;
   const cantidadAlmuerzos = cantidadAlmuerzosIncluidos + cantidadAlmuerzosAdicionales ||
-    (incluyeAlmuerzo && !almuerzoAdicionalActivo ? Math.max(1, Number(selected?.cantidad_personas || 1)) : 0);
+    (almuerzoIncluidoPlan && cantidadAlmuerzosIncluidos === 0 && !almuerzoConfigurado
+      ? Math.max(1, Number(selected?.cantidad_personas || 1)) : 0);
   const almuerzoParaCH = almuerzoIncluidoPlan;
   const restauranteParaCH = almuerzoParaCH ? restaurante : "";
 
