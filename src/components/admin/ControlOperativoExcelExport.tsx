@@ -108,14 +108,6 @@ function readCurrentPageFilters(): { date: string; filters: ExportFilters } {
   return { date, filters };
 }
 
-const estadoLabel = (value: string) => ({
-  programada: "Programada",
-  asistio: "Asistió",
-  no_asistio: "No asistió",
-  reprogramada: "Reprogramada",
-  cancelada: "Cancelada",
-}[value] ?? value);
-
 const fechaISO = (value?: string | null) => String(value ?? "").slice(0, 10);
 
 function fechaEnRango(value: string | null | undefined, desde: string, hasta: string) {
@@ -131,26 +123,6 @@ function agruparPorReserva(rows: ControlOperativoRow[]) {
     map.set(row.id_reserva, current);
   }
   return [...map.values()];
-}
-
-function pagosPorReserva(pagos: ReservaPago[]) {
-  const map = new Map<number, ReservaPago[]>();
-  for (const pago of pagos) {
-    const current = map.get(pago.id_reserva) ?? [];
-    current.push(pago);
-    map.set(pago.id_reserva, current);
-  }
-  return map;
-}
-
-function devolucionesPorReserva(devoluciones: ReservaDevolucion[]) {
-  const map = new Map<number, ReservaDevolucion[]>();
-  for (const devolucion of devoluciones) {
-    const current = map.get(devolucion.id_reserva) ?? [];
-    current.push(devolucion);
-    map.set(devolucion.id_reserva, current);
-  }
-  return map;
 }
 
 async function exportarControlOperativoExcel(desde: string, hasta: string, filters: ExportFilters) {
