@@ -67,6 +67,15 @@ export async function resetManagedUserPassword(userId: string, password: string)
 }
 
 export async function listAvailableGuides(): Promise<ManagedUser[]> {
-  const users = await listManagedUsers();
-  return users.filter(user => user.role === "guia" && !!user.username);
+  const {data,error} = await client().rpc("listar_guias_reserva");
+  if(error) throw error;
+  return (data ?? []).map((g: any) => ({
+    user_id: String(g.user_id),
+    username: String(g.username ?? ""),
+    telefono: String(g.telefono ?? ""),
+    email: "",
+    role: "guia",
+    created_at: "",
+    last_sign_in_at: null,
+  }));
 }
