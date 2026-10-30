@@ -1111,7 +1111,7 @@ export default function ReservasApprovalGuard() {
 
             {advancedOption === "adicionales" && (
               <div style={{ display: "grid", gap: 10 }}>
-                {(adicionalesDelPlan.length > 0 || adicionalesLibres.length > 0 || planesAdicionalesDisponibles.length > 0 || true) ? (
+                {true ? (
                   <div style={{ border: "1px solid #e4ddd4", borderRadius: 14, padding: 14, background: "#fff" }}>
                     <div style={{ marginBottom: 12 }}>
                       <strong style={{ display: "block", fontSize: 15 }}>Adicionales y planes adicionales</strong>
