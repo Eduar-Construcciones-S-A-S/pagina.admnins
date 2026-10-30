@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
+import { supabase } from "../../lib/supabase";
 import {
   getControlOperativo,
   getDevolucionesControlOperativo,
@@ -156,94 +157,77 @@ async function exportarControlOperativoExcel(desde: string, hasta: string, filte
   if (!desde || !hasta) throw new Error("Selecciona la fecha inicial y la fecha final.");
   if (desde > hasta) throw new Error("La fecha inicial no puede ser posterior a la fecha final.");
 
-  const [allRows, allPagos, allDevoluciones] = await Promise.all([
+  if (!supabase) throw new Error("Supabase no está configurado");
+  const [allRows, allPagos, allDevoluciones, codigosResult] = await Promise.all([
     getControlOperativo(),
     getPagosControlOperativo(),
     getDevolucionesControlOperativo(),
+    supabase.from("codigo_operativo").select("id_codigo_operativo,codigo_ch"),
   ]);
+  if (codigosResult.error) throw codigosResult.error;
+  const chPorId = new Map((codigosResult.data ?? []).map((c) => [
+    Number(c.id_codigo_operativo), texto(c.codigo_ch),
+  ]));
+  const chCorto = (value: string) => {
+    const match = value.match(/CH[\\s-]*\\d+/i);
+    return match ? match[0].replace(/[\\s-]/g, "").toUpperCase() : value;
+  };
 
   const rows = allRows.filter((row) =>
     fechaEnRango(row.fecha, desde, hasta) && rowMatchesFilters(row, filters)
   );
   if (!rows.length) throw new Error("No hay registros que coincidan con el rango y los filtros seleccionados.");
-
   const reservationIds = new Set(rows.map((row) => row.id_reserva));
   const pagos = allPagos.filter((pago) => reservationIds.has(pago.id_reserva));
   const devoluciones = allDevoluciones.filter((item) => reservationIds.has(item.id_reserva));
 
-  const grupos = agruparPorReserva(rows);
-  const pagosMap = pagosPorReserva(pagos);
-  const devolucionesMap = devolucionesPorReserva(devoluciones);
-
   const headers = [
-    "Código", "Estado operativo", "Motivo estado", "Plan", "Fecha reserva", "Hora",
-    "Cantidad personas", "Nombre", "Edad", "Nacionalidad", "Tipo documento",
-    "Documento", "Contacto participante", "Contacto cliente", "Mina", "Refrigerio",
-    "Restaurante", "Incluye almuerzo", "Tipo de almuerzo", "Valor total", "Abono",
-    "Medio abono", "Pago saldo", "Medio saldo", "Total recaudado", "Devuelto",
-    "Neto caja", "Saldo pendiente", "Observación",
+    "Código operativo (CH)",
+    "Nombre del plan",
+    "Código de reserva",
+    "Fecha de realización de la reserva",
+    "Tipo de documento",
+    "Número de documento",
+    "Nombres y apellidos",
+    "Correo electrónico",
+    "Teléfono",
+    "Fecha de la visita",
+    "Horario de la ruta",
+    "Observación",
+    "Tipo de almuerzo",
+    "Valor de la reserva",
   ];
-
+  const grupos = agruparPorReserva(rows);
   const data = grupos.flatMap((grupo) => {
     const principal = grupo[0];
-    const pagosReserva = pagosMap.get(principal.id_reserva) ?? [];
-    const devolucionesReserva = devolucionesMap.get(principal.id_reserva) ?? [];
-    const recaudado = pagosReserva.reduce((sum, pago) => sum + Number(pago.monto || 0), 0);
-    const devuelto = devolucionesReserva.reduce((sum, item) => sum + Number(item.monto || 0), 0);
-    const mediosSaldo = pagosReserva
-      .filter((pago) => pago.tipo_pago === "saldo")
-      .map((pago) => pago.medio_pago)
-      .filter(Boolean);
-    const medioSaldo = [...new Set(mediosSaldo)].join(" | ") || principal.medio_saldo || "";
-
-    return grupo.map((row, index) => {
-      const primeraFila = index === 0;
-      return [
-        principal.reserva_codigo,
-        primeraFila ? estadoLabel(principal.estado_operativo) : "",
-        primeraFila ? principal.motivo_estado_operativo : "",
-        principal.plan,
-        fecha(principal.fecha),
-        hora(principal.hora),
-        primeraFila ? Number(principal.cantidad || grupo.length || 0) : "",
-        texto(row.nombre),
-        texto(row.edad),
-        texto(row.nacionalidad),
-        texto(row.tipo_documento),
-        texto(row.documento),
-        texto(row.contacto),
-        principal.contacto_cliente,
-        principal.mina ? "Sí" : "No",
-        principal.refrigerio ? "Sí" : "No",
-        principal.restaurante || "",
-        principal.incluye_almuerzo ? "Sí" : "No",
-        texto(row.almuerzo),
-        primeraFila ? Number(principal.total || 0) : "",
-        primeraFila ? Number(principal.abono || 0) : "",
-        primeraFila ? principal.medio_abono || "" : "",
-        primeraFila ? Number(principal.pago_saldo || 0) : "",
-        primeraFila ? medioSaldo : "",
-        primeraFila ? recaudado : "",
-        primeraFila ? devuelto : "",
-        primeraFila ? Math.max(0, recaudado - devuelto) : "",
-        primeraFila ? Number(principal.saldo_pendiente || 0) : "",
-        primeraFila ? principal.observacion || "" : "",
-      ];
-    });
+    const ch = principal.id_codigo_operativo == null
+      ? ""
+      : chCorto(chPorId.get(principal.id_codigo_operativo) ?? "");
+    return grupo.map((row, index) => [
+      ch,
+      principal.plan,
+      principal.reserva_codigo,
+      fecha(principal.fecha_solicitud),
+      texto(row.tipo_documento),
+      texto(row.documento),
+      texto(row.nombre),
+      texto(row.correo),
+      texto(row.contacto || principal.contacto_cliente),
+      fecha(principal.fecha),
+      hora(principal.hora),
+      texto(principal.observacion),
+      texto(row.almuerzo),
+      index === 0 ? Number(principal.total || 0) : "",
+    ]);
   });
 
   const worksheet = XLSX.utils.aoa_to_sheet([headers, ...data]);
-  worksheet["!autofilter"] = { ref: `A1:AC${Math.max(1, data.length + 1)}` };
-  worksheet["!cols"] = [18,18,28,42,15,10,15,32,12,22,24,24,24,20,10,12,20,18,24,16,16,20,16,24,18,16,16,18,40].map((wch) => ({ wch }));
-
-  const moneyColumns = new Set([19, 20, 22, 24, 25, 26, 27]);
+  worksheet["!autofilter"] = { ref: `A1:N${Math.max(1, data.length + 1)}` };
+  worksheet["!cols"] = [20,42,25,24,22,25,37,36,22,20,20,48,30,22].map((wch) => ({wch}));
   for (let row = 1; row <= data.length; row += 1) {
-    for (const col of moneyColumns) {
-      const ref = XLSX.utils.encode_cell({ r: row, c: col });
-      if (worksheet[ref]) worksheet[ref].z = "$#,##0";
-    }
+    const ref = XLSX.utils.encode_cell({r: row, c: 13});
+    if (worksheet[ref]) worksheet[ref].z = "$#,##0";
   }
-
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, "Reservas");
 
