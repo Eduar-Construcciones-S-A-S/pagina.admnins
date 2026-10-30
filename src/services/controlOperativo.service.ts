@@ -37,7 +37,7 @@ export type ControlOperativoRow = {
   aprobado_por_user_id:string|null; aprobado_por_username:string; aprobado_por_email:string;
   nombre:string; edad:number|null; nacionalidad:string;
   tipo_documento:string; documento:string; contacto:string; contacto_cliente:string; cantidad:number|null; mina:boolean|null; refrigerio:boolean|null;
-  restaurante:string; almuerzo:string; total:number; abono:number; medio_abono:string; referencia_pago_abono:string; pago_saldo:number; medio_saldo:string; saldo_pendiente:number; observacion:string;
+  restaurante:string; almuerzo:string; correo:string; fecha_solicitud:string; total:number; abono:number; medio_abono:string; referencia_pago_abono:string; pago_saldo:number; medio_saldo:string; saldo_pendiente:number; observacion:string;
   estado_operativo: EstadoOperativo; motivo_estado_operativo:string; estado_operativo_at:string;
 };
 
@@ -158,6 +158,8 @@ function buildControlOperativoRows(
         mina:r.mina??null,
         refrigerio:r.refrigerio??null,
         restaurante:text(r.restaurante),
+        correo:text(p?.correo),
+        fecha_solicitud:dateOnly(r.fecha_solicitud),
         almuerzo:text(p?.tipo_almuerzo)||platosPorPosicion.get(posicion+1)||"",
         total,
         abono,
