@@ -283,7 +283,7 @@ export default function ReservasApprovalGuard() {
     })) as Record<number, number>;
 
     for (const existing of existentes) {
-      if (existing.tipo_movimiento !== "agregado") continue;
+      if (existing.tipo_movimiento !== "agregado" || existing.id_adicional == null) continue;
       if (Object.prototype.hasOwnProperty.call(cantidades, existing.id_adicional)) continue;
       cantidades[Number(existing.id_adicional)] = Math.max(0, Number(existing.cantidad_aplicada || 0));
     }
