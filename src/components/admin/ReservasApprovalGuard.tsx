@@ -1111,7 +1111,7 @@ export default function ReservasApprovalGuard() {
 
             {advancedOption === "adicionales" && (
               <div style={{ display: "grid", gap: 10 }}>
-                {(adicionalesDelPlan.length > 0 || adicionalesLibres.length > 0 || planesAdicionalesDisponibles.length > 0) ? (
+                {(adicionalesDelPlan.length > 0 || adicionalesLibres.length > 0 || planesAdicionalesDisponibles.length > 0 || true) ? (
                   <div style={{ border: "1px solid #e4ddd4", borderRadius: 14, padding: 14, background: "#fff" }}>
                     <div style={{ marginBottom: 12 }}>
                       <strong style={{ display: "block", fontSize: 15 }}>Adicionales y planes adicionales</strong>
@@ -1223,17 +1223,6 @@ export default function ReservasApprovalGuard() {
                     );
                   })}
 
-                  {adicionalesLibres.length > 0 && (
-                    <>
-                      <div style={{ margin: "5px 0 2px", paddingTop: 8, borderTop: adicionalesDelPlan.length ? "1px solid #eee7de" : "none" }}>
-                        <strong style={{ display: "block", fontSize: 13, color: "#5b5147" }}>
-                          Todos los demás adicionales disponibles
-                        </strong>
-                        <small style={{ color: "#82786d" }}>
-                          Esta lista muestra todos los adicionales activos del catálogo, aunque no estén vinculados originalmente al plan.
-                        </small>
-                      </div>
-
                       <div style={{display:"grid",gap:10,padding:12,border:"1px solid #ddd",borderRadius:10}}>
                         <label><input type="checkbox" checked={crearTemporal} onChange={e=>setCrearTemporal(e.target.checked)} disabled={saving}/> Crear adicional temporal para esta reserva</label>
                         {crearTemporal && <>
@@ -1246,6 +1235,18 @@ export default function ReservasApprovalGuard() {
                           <small>Este adicional no se agregará al catálogo general.</small>
                         </>}
                       </div>
+
+                  {adicionalesLibres.length > 0 && (
+                    <>
+                      <div style={{ margin: "5px 0 2px", paddingTop: 8, borderTop: adicionalesDelPlan.length ? "1px solid #eee7de" : "none" }}>
+                        <strong style={{ display: "block", fontSize: 13, color: "#5b5147" }}>
+                          Todos los demás adicionales disponibles
+                        </strong>
+                        <small style={{ color: "#82786d" }}>
+                          Esta lista muestra todos los adicionales activos del catálogo, aunque no estén vinculados originalmente al plan.
+                        </small>
+                      </div>
+
                       {adicionalesLibres.map((item) => {
                         const perPerson = item.tipo_cobro === "por_persona";
                         const max = perPerson ? cantidadSeleccionada : 1;
