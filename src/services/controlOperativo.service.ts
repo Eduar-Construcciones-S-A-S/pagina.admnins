@@ -218,9 +218,17 @@ export async function getControlOperativoCoordinador():Promise<ControlOperativoR
   const approverMap=new Map<number,any>(
     (Array.isArray(approvers)?approvers:[]).map((row:any)=>[Number(row.id_reserva),row])
   );
-  const reservas=(Array.isArray(raw.reservas)?raw.reservas:[]).map((reserva:any)=>{
-    const approval=approverMap.get(Number(reserva.id_reserva));
-    return approval?{...reserva,...approval}:reserva;
+  const rawReservas=Array.isArray(raw.reservas)?raw.reservas:[];
+  const ids=rawReservas.map((r:any)=>Number(r.id_reserva)).filter(Number.isFinite);
+  const {data:selecciones,error:seleccionesError}=ids.length
+    ?await db.from("reserva").select("id_reserva,seleccion_almuerzos").in("id_reserva",ids)
+    :{data:[],error:null};
+  if(seleccionesError) throw seleccionesError;
+  const seleccionMap=new Map<number,any>((selecciones??[]).map((r:any)=>[Number(r.id_reserva),r.seleccion_almuerzos]));
+  const reservas=rawReservas.map((reserva:any)=>{
+    const id=Number(reserva.id_reserva);
+    const approval=approverMap.get(id);
+    return {...reserva,...(approval??{}),seleccion_almuerzos:seleccionMap.get(id)??reserva.seleccion_almuerzos??[]};
   });
 
   return buildControlOperativoRows(
