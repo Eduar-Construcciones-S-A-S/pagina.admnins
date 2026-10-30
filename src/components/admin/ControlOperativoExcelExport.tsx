@@ -125,6 +125,12 @@ function agruparPorReserva(rows: ControlOperativoRow[]) {
   return [...map.values()];
 }
 
+function pagosPorReserva(pagos: ReservaPago[]) {
+  const map=new Map<number,ReservaPago[]>();
+  for(const pago of pagos) map.set(pago.id_reserva,[...(map.get(pago.id_reserva)??[]),pago]);
+  return map;
+}
+
 async function exportarControlOperativoExcel(desde: string, hasta: string, filters: ExportFilters) {
   if (!desde || !hasta) throw new Error("Selecciona la fecha inicial y la fecha final.");
   if (desde > hasta) throw new Error("La fecha inicial no puede ser posterior a la fecha final.");
@@ -154,54 +160,58 @@ async function exportarControlOperativoExcel(desde: string, hasta: string, filte
   const devoluciones = allDevoluciones.filter((item) => reservationIds.has(item.id_reserva));
 
   const headers = [
-    "Código operativo (CH)",
-    "Nombre del plan",
-    "Código de reserva",
-    "Fecha de realización de la reserva",
-    "Tipo de documento",
-    "Número de documento",
-    "Nombres y apellidos",
-    "Correo electrónico",
-    "Teléfono",
-    "Fecha de la visita",
-    "Horario de la ruta",
-    "Observación",
-    "Tipo de almuerzo",
-    "Valor de la reserva",
+    "Código operativo (CH)", "Nombre del plan", "Código de reserva",
+    "Fecha de realización de la reserva", "Tipo de documento", "Número de documento",
+    "Nombres y apellidos", "Correo electrónico", "Teléfono", "Fecha de la visita",
+    "Horario de la ruta", "Observación", "Tipo de almuerzo", "Valor de la reserva",
+    "Número de personas", "Valor unitario", "Total abonado", "Abonos (detalle)",
+    "Fechas de abono", "Códigos de abono (4 dígitos)",
   ];
   const grupos = agruparPorReserva(rows);
+  const pagosMap = pagosPorReserva(pagos);
+  const codigo4 = (value: unknown) => {
+    const digits = texto(value).replace(/\\D/g, "");
+    return digits.length >= 4 ? digits.slice(-4) : "";
+  };
   const data = grupos.flatMap((grupo) => {
     const principal = grupo[0];
-    const ch = principal.id_codigo_operativo == null
-      ? ""
-      : chCorto(chPorId.get(principal.id_codigo_operativo) ?? "");
-    return grupo.map((row, index) => [
-      ch,
-      principal.plan,
-      principal.reserva_codigo,
-      fecha(principal.fecha_solicitud),
-      texto(row.tipo_documento),
-      texto(row.documento),
-      texto(row.nombre),
-      texto(row.correo),
-      texto(row.contacto || principal.contacto_cliente),
-      fecha(principal.fecha),
-      hora(principal.hora),
-      texto(principal.observacion),
-      texto(row.almuerzo),
-      index === 0 ? Number(principal.total || 0) : "",
+    const ch = principal.id_codigo_operativo == null ? "" :
+      chCorto(chPorId.get(principal.id_codigo_operativo) ?? "");
+    const abonos = (pagosMap.get(principal.id_reserva) ?? [])
+      .filter(p => p.tipo_pago === "abono")
+      .sort((x,y) => texto(x.fecha_abono || x.fecha_pago).localeCompare(texto(y.fecha_abono || y.fecha_pago)));
+    const totalAbonos = abonos.length
+      ? abonos.reduce((sum,p) => sum + Number(p.monto || 0),0)
+      : Number(principal.abono || 0);
+    const desglose = abonos.map((p,i) => `Abono ${i+1}: $${Number(p.monto || 0).toLocaleString("es-CO")} (${texto(p.medio_pago)})`).join(" | ");
+    const fechasAbonos = abonos.map((p,i) => `Abono ${i+1}: ${fecha(p.fecha_abono || p.fecha_pago)}`).join(" | ");
+    // El identificador de 4 dígitos se obtiene solo de una referencia real.
+    const codigosAbonos = abonos.map((p,i) =>
+      `Abono ${i+1}: ${codigo4(p.referencia_pago) || (p.observacion === "Abono registrado en la reserva" ? codigo4(principal.referencia_pago_abono) : "")}`
+    ).join(" | ");
+    return grupo.map((row) => [
+      ch, principal.plan, principal.reserva_codigo, fecha(principal.fecha_solicitud),
+      texto(row.tipo_documento), texto(row.documento), texto(row.nombre),
+      texto(row.correo), texto(row.contacto || principal.contacto_cliente),
+      fecha(principal.fecha), hora(principal.hora), texto(principal.observacion),
+      texto(row.almuerzo), Number(principal.total || 0),
+      Number(principal.cantidad || grupo.length || 0),
+      Number(principal.precio_unitario || 0),
+      totalAbonos, desglose, fechasAbonos, codigosAbonos,
     ]);
   });
 
   const worksheet = XLSX.utils.aoa_to_sheet([headers, ...data]);
-  worksheet["!autofilter"] = { ref: `A1:N${Math.max(1, data.length + 1)}` };
-  worksheet["!cols"] = [20,42,25,24,22,25,37,36,22,20,20,48,30,22].map((wch) => ({wch}));
-  for (let row = 1; row <= data.length; row += 1) {
-    const ref = XLSX.utils.encode_cell({r: row, c: 13});
-    if (worksheet[ref]) worksheet[ref].z = "$#,##0";
+  worksheet["!autofilter"] = {ref: `A1:T${Math.max(1,data.length+1)}`};
+  worksheet["!cols"] = [20,42,25,24,22,25,37,36,22,20,20,48,30,22,20,20,20,55,44,44].map(wch=>({wch}));
+  for (let row=1;row<=data.length;row++) {
+    for(const col of [13,15,16]) {
+      const cell=XLSX.utils.encode_cell({r:row,c:col});
+      if(worksheet[cell]) worksheet[cell].z="$#,##0";
+    }
   }
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Reservas");
+  const workbook=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook,worksheet,"Reservas");
 
   const pagosSheet = XLSX.utils.json_to_sheet(pagos.map((pago) => ({
     Reserva: rows.find((row) => row.id_reserva === pago.id_reserva)?.reserva_codigo ?? `#${pago.id_reserva}`,
