@@ -196,7 +196,21 @@ export async function deletePlan(id: number) {
 }
 
 /* ─── CLIENTES ───────────────────────────────────────────── */
-export async function getClientes(){const{data,error}=await getClient().from("cliente").select("telefono, atencion_humana, etapaconversacion, id_plan").order("telefono",{ascending:true});if(error)throw error;return data??[]}
+export async function getClientes(){
+  const db=getClient();
+  const [{data,error},{data:identidades,error:identidadesError}]=await Promise.all([
+    db.from("cliente").select("telefono, atencion_humana, bot_habilitado, etapaconversacion, id_plan").order("telefono",{ascending:true}),
+    db.from("whatsapp_identidades").select("telefono, username, nombre_perfil, bsuid")
+  ]);
+  if(error)throw error;
+  if(identidadesError) console.warn("No se pudieron consultar identidades WhatsApp",identidadesError);
+  const normalize=(v:string|null|undefined)=>String(v??"").replace(/\D/g,"").slice(-10);
+  const identityByPhone=new Map<string,{username:string|null;nombre_perfil:string|null;bsuid:string|null}>();
+  for(const row of identidades??[]){
+    if(row.telefono) identityByPhone.set(normalize(row.telefono),row);
+  }
+  return (data??[]).map(c=>({...c,identidad:identityByPhone.get(normalize(c.telefono))??null}));
+}
 export async function createCliente(payload:any){const{data,error}=await getClient().from("cliente").insert(payload).select().single();if(error)throw error;return data}
 export async function updateCliente(telefono:string,payload:any){const{data,error}=await getClient().from("cliente").update(payload).eq("telefono",telefono).select().single();if(error)throw error;return data}
 export async function deleteCliente(telefono:string){const{error}=await getClient().from("cliente").delete().eq("telefono",telefono);if(error)throw error}
