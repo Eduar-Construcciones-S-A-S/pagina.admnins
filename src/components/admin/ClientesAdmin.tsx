@@ -50,7 +50,7 @@ export default function ClientesAdmin() {
   // Filtros
   const [search, setSearch] = useState("");
   const [etapaFilter, setEtapaFilter] = useState("todas");
-  const [atencionFilter, setAtencionFilter] = useState<"todas" | "humana" | "bot">("todas");
+  const [atencionFilter, setAtencionFilter] = useState<"todas" | "humana" | "bot" | "pausado">("todas");
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
 
@@ -181,10 +181,6 @@ export default function ClientesAdmin() {
     || c.telefono;
 
   /* ── Filtrado y paginación ── */
-  const etapasDisponibles = Array.from(
-    new Set(clientes.map((c) => c.etapaconversacion).filter(Boolean))
-  ) as string[];
-
   const filtered = clientes.filter((c) => {
     const q = search.toLowerCase();
     const matchSearch =
@@ -194,8 +190,9 @@ export default function ClientesAdmin() {
     const matchEtapa = etapaFilter === "todas" ? true : c.etapaconversacion === etapaFilter;
     const matchAtencion =
       atencionFilter === "todas" ? true :
-      atencionFilter === "humana" ? !c.bot_habilitado :
-      c.bot_habilitado && !c.atencion_humana;
+      atencionFilter === "humana" ? c.atencion_humana :
+      atencionFilter === "bot" ? c.bot_habilitado && !c.atencion_humana :
+      !c.bot_habilitado && !c.atencion_humana;
     return matchSearch && matchEtapa && matchAtencion;
   });
 
@@ -208,9 +205,9 @@ export default function ClientesAdmin() {
 
   /* ── KPIs ── */
   const totalClientes = clientes.length;
-  const conHumana = clientes.filter((c) => !c.bot_habilitado).length;
+  const conHumana = clientes.filter((c) => c.atencion_humana).length;
   const soloBot = clientes.filter((c) => c.bot_habilitado && !c.atencion_humana).length;
-  const etapasDistintas = etapasDisponibles.length;
+  const pausados = clientes.filter((c) => !c.bot_habilitado && !c.atencion_humana).length;
 
   /* ── Sub-componentes ── */
   const nombrePlan = (id_plan?: number | null) => {
@@ -227,7 +224,9 @@ export default function ClientesAdmin() {
   const AtencionBadge = ({ humana, habilitado }: { humana: boolean; habilitado: boolean }) =>
     (humana || !habilitado)
       ? <span className="cl-badge cl-badge-humana"><Headphones size={12} /> Humana</span>
-      : <span className="cl-badge cl-badge-bot"><Bot size={12} /> Bot</span>;
+      : habilitado
+        ? <span className="cl-badge cl-badge-bot"><Bot size={12} /> Bot activo</span>
+        : <span className="cl-badge cl-badge-plan"><Bot size={12} /> Bot pausado</span>;
 
   const EtapaBadge = ({ etapa }: { etapa?: string | null }) => {
     if (!etapa) return <span className="rv-null">—</span>;
@@ -315,15 +314,15 @@ export default function ClientesAdmin() {
         <div className="cl-kpi line-slate">
           <div className="cl-kpi-icon cl-kpi-slate"><Bot size={20} /></div>
           <div>
-            <div className="cl-kpi-label">Solo bot</div>
+            <div className="cl-kpi-label">Bot activo</div>
             <div className="cl-kpi-value">{soloBot}</div>
           </div>
         </div>
         <div className="cl-kpi line-violet">
           <div className="cl-kpi-icon cl-kpi-violet"><MessageSquare size={20} /></div>
           <div>
-            <div className="cl-kpi-label">Etapas distintas</div>
-            <div className="cl-kpi-value">{etapasDistintas}</div>
+            <div className="cl-kpi-label">Bot pausado</div>
+            <div className="cl-kpi-value">{pausados}</div>
           </div>
         </div>
       </div>
@@ -365,7 +364,8 @@ export default function ClientesAdmin() {
           >
             <option value="todas">Todas</option>
             <option value="humana">Humana</option>
-            <option value="bot">Solo bot</option>
+            <option value="bot">Bot activo</option>
+            <option value="pausado">Bot pausado</option>
           </select>
         </div>
 
