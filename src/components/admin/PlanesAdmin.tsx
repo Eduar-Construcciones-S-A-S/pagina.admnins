@@ -92,7 +92,7 @@ export default function PlanesAdmin(){
   const handleSave=async()=>{if(!validate())return;setSaving(true);try{
     let precioBase: number|null=formData.precio_plan??null;
     if(kind==="normal"&&formData.tipo_fecha==="cualquier_dia")precioBase=tarifaForm.finSemana;
-    if(kind==="subplan")precioBase=promoSelected?formData.precio_plan:tarifaForm.buggy1;
+    if(kind==="subplan")precioBase=promoSelected?(formData.precio_plan??null):tarifaForm.buggy1;
     if(kind==="grupo")precioBase=null;
     const payload={...formData,es_grupo:kind==="grupo",id_plan_padre:kind==="subplan"?formData.id_plan_padre:null,precio_plan:precioBase,plan_fechas:kind!=="grupo"&&formData.tipo_fecha==="fechas_especificas"?formData.plan_fechas:[],plan_horas:kind!=="grupo"&&formData.tipo_hora!=="sin_hora"?formData.plan_horas:[]};
     const saved=editing?await updatePlan(editing.id_plan,payload):await createPlan(payload);
