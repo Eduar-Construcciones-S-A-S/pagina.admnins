@@ -639,13 +639,32 @@ export default function ReservasAdmin() {
     correo: p.correo.trim() || null,
   });
 
-  const handleSave = async () => {
+  const handleSave = async (reenviarPdf = false) => {
     setFormError(null);
     setSaving(true);
     try {
       const validation = validateParticipants();
       if (validation) {
         setFormError(validation);
+        return;
+      }
+      if (editing && (!detalleEditing || cargandoDetalleEditing)) {
+        setFormError("Espera a que se carguen el historial y los adicionales antes de guardar.");
+        return;
+      }
+      if (reenviarPdf && (!editing?.aprobado || !formData.aprobado)) {
+        setFormError("Para rehacer el PDF la reserva debe permanecer aprobada.");
+        return;
+      }
+      if (extrasDirty && extrasEdit.some(item =>
+        item.tipo_movimiento === "agregado" &&
+        (!item.nombre_adicional.trim() || !Number.isFinite(item.precio_unitario) ||
+         Number(item.precio_unitario) <= 0 || !Number.isInteger(Number(item.cantidad_aplicada)) ||
+         Number(item.cantidad_aplicada) < 1 ||
+         (item.tipo_cobro === "por_persona" && Number(item.cantidad_aplicada) > Number(formData.cantidad_personas)) ||
+         (item.id_adicional == null && !String(item.descripcion_temporal || "").trim()))
+      )) {
+        setFormError("Revisa los adicionales: nombre, precio positivo, cantidad válida y descripción del temporal son obligatorios.");
         return;
       }
 
@@ -720,6 +739,28 @@ export default function ReservasAdmin() {
             valor_total: standardTotal,
           };
 
+      const precioFinal = (() => {
+        if (!editing || !detalleEditing || !extrasDirty) return pricingFields;
+        const subtotal = desgloseEdicionReserva(
+          Number(editing.valor_total || 0),
+          Number(editing.precio_unitario || 0),
+          Math.max(1, Number(editing.cantidad_personas || 1)),
+          detalleEditing.adicionales,
+          detalleEditing.planesAdicionales,
+        );
+        const base = conservarPrecioExistente
+          ? subtotal.base
+          : (isBuggyPlan && buggyPricing ? buggyPricing.totalPrice : standardTotal);
+        const extrasNuevos = impactoAdicionalesGuardados(extrasEdit);
+        const nuevoTotal = base + subtotal.planesExtra + extrasNuevos;
+        if (!Number.isFinite(nuevoTotal) || nuevoTotal <= 0) throw new Error("El total con adicionales debe ser mayor a $0.");
+        return {
+          ...pricingFields,
+          valor_total: nuevoTotal,
+          precio_unitario: conservarPrecioExistente ? Number(editing.precio_unitario) : Number(pricingFields.precio_unitario),
+        };
+      })();
+
       if (editing) {
         if (!clientes.some((c) => c.telefono === clientPhone)) {
           await createCliente({
@@ -739,8 +780,16 @@ export default function ReservasAdmin() {
           cantidad_personas: participantCount,
           aprobado: formData.aprobado,
           fecha_aprobacion,
-          ...pricingFields,
+          ...precioFinal,
+          ...(observacionEdit !== String(detalleEditing?.reserva.observacion ?? "")
+            ? { observacion: observacionEdit.trim() || null } : {}),
         });
+
+        if (extrasDirty) {
+          // Solo se sustituyen cuando el usuario ha editado los adicionales.
+          // Las reservas antiguas no se recalculan por abrir y guardar el formulario.
+          await replaceReservaAdicionales(editing.id_reserva, extrasEdit);
+        }
 
         if (Number(updatedReserva?.id_plan) !== selectedPlanId) {
           throw new Error("El cambio de plan no quedó guardado. Intenta nuevamente.");
@@ -794,12 +843,27 @@ export default function ReservasAdmin() {
         }
       }
 
+      let errorPdf = "";
+      if (reenviarPdf && editing) {
+        try {
+          await rehacerYReenviarPdfReserva(editing.id_reserva);
+        } catch (error) {
+          errorPdf = error instanceof Error ? error.message : "No se pudo enviar la solicitud a n8n";
+        }
+      }
+
       setShowForm(false);
       setDeletedParticipantIds([]);
       setHasFullGroupList(false);
       setGroupImportFile("");
       setGroupImportDirty(false);
+      setPdfAlGuardar(false);
       await fetchAll();
+      if (errorPdf) {
+        window.alert("Los cambios se guardaron, pero no se pudo solicitar el nuevo PDF: " + errorPdf);
+      } else if (reenviarPdf) {
+        window.alert("Cambios guardados. La regeneración y el reenvío del PDF quedaron solicitados; verifica su ejecución en n8n.");
+      }
     } catch (e: any) {
       console.error(e);
       setFormError(e?.message || "No fue posible guardar la reserva.");
