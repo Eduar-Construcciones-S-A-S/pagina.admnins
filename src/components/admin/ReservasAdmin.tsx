@@ -787,6 +787,21 @@ export default function ReservasAdmin() {
         };
       })();
 
+      if (editing?.aprobado && selectedPlanId !== Number(editing.id_plan)) {
+        throw new Error(
+          "No se puede cambiar el plan de una reserva aprobada sin reasignar su código operativo (CH). " +
+          "Conserva el plan original y solicita el cambio operativo antes de rehacer el PDF.",
+        );
+      }
+      const pagado = Number(detalleEditing?.reserva.valor_abonado || 0) +
+        Number(detalleEditing?.reserva.valor_saldo_pagado || 0);
+      if (editing && Number(precioFinal.valor_total) + 0.01 < pagado) {
+        throw new Error(
+          "El nuevo total no puede ser inferior a los abonos y saldos ya pagados (" +
+          pagado.toLocaleString("es-CO") + " COP). Revisa los adicionales.",
+        );
+      }
+
       const guiaCambio = Boolean(editing && detalleEditing &&
         guiaPdfId !== String(detalleEditing.reserva.guia_user_id ?? ""));
       const guiaNuevo = guiaCambio ? guiasPdf.find(g=>g.user_id===guiaPdfId) : null;
