@@ -555,6 +555,11 @@ export default function ReservasApprovalGuard() {
     const totalNuevo = totalSinPlanesAdicionales + impactoPlanesAdicionales;
     const unitarioSinPlanesAdicionales = totalSinPlanesAdicionales / cantidad;
     const unitarioNuevo = totalNuevo / cantidad;
+    // El precio unitario pertenece al plan contratado: los extras aumentan
+    // valor_total, nunca deben sobrescribir el precio del plan por persona.
+    const unitarioBaseParaGuardar = advancedOption === "valor_total" || advancedOption === "valor_unitario"
+      ? unitarioSinPlanesAdicionales
+      : totalBaseOriginal / cantidad;
     const ajusteMonetario = advancedOption === "valor_total"
       ? Math.abs(totalSinPlanesAdicionales - totalOriginal) > 0.01
       : advancedOption === "valor_unitario"
@@ -644,7 +649,7 @@ export default function ReservasApprovalGuard() {
 
       if (ajusteMonetario || Math.abs(totalSinPlanesAdicionales - totalOriginal) > 0.01) {
         patch.valor_total = totalSinPlanesAdicionales;
-        patch.precio_unitario = unitarioSinPlanesAdicionales;
+        patch.precio_unitario = unitarioBaseParaGuardar;
         if (ajusteMonetario || crearTemporal) patch.observacion = [
           observacion.trim(),
           crearTemporal ? `Adicional temporal: ${temporal.nombre.trim()} (Qué incluye: ${temporal.descripcion.trim()}). ${cantidadTemporal} x ${formatMoney(precioTemporal)} = ${formatMoney(precioTemporal*cantidadTemporal)}.` : "",
