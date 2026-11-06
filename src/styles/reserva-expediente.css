@@ -55,3 +55,9 @@
 .rv-xp-complete-modal .rv-btn-save{background:#b6853e}
 .rv-xp-complete-modal .rv-btn-save:hover:not(:disabled){background:#98702f}
 @media(max-width:730px){.rv-xp-complete-modal{max-width:98vw}.rv-xp-finance-grid,.rv-xp-info-grid{grid-template-columns:1fr}.rv-xp-extra-row{flex-wrap:wrap}.rv-xp-extra-edit-main,.rv-xp-extra-numbers{flex-basis:100%}.rv-xp-extra-amount{margin-left:auto}.rv-xp-total strong{font-size:20px}.rv-xp-complete-modal .rv-modal-footer{flex-wrap:wrap}.rv-xp-modal-footer-hint{flex-basis:100%}}
+
+.rv-xp-edit-field{display:grid;gap:7px}
+.rv-xp-edit-field label{font-size:11px;color:#776444;font-weight:800}
+.rv-xp-edit-field select{width:100%;min-width:0;border:1px solid #d7caba;border-radius:8px;background:white;color:#3d3325;padding:9px;font:inherit;font-size:12px}
+.rv-xp-checkbox{display:flex;align-items:center;gap:8px;padding:9px 0;cursor:pointer}
+.rv-xp-checkbox input{accent-color:#8eaa55;width:16px;height:16px}
