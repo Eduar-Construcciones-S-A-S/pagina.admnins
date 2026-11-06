@@ -46,6 +46,7 @@ type ReservaLite = {
   aprobado?: boolean | null;
   precio_unitario?: number | null;
   valor_total?: number | null;
+  precio_plan?: number | null;
   refrigerio?: boolean | null;
   referencia_pago_abono?: string | null;
   observacion?: string | null;
@@ -67,6 +68,20 @@ const onlyDigits = (value: string) => value.replace(/\D/g, "");
 const parseMoney = (value: string) => Number(value.replace(/\./g, "").replace(/,/g, ".").replace(/[^\d.]/g, "") || 0);
 const formatMoney = (value: number | null | undefined) => Number(value || 0).toLocaleString("es-CO");
 const labelMetodo = (value: string) => value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+
+// Los movimientos almacenados pueden describir elementos ya incluidos en el precio
+// original. Solo se descuentan del total cuando existe evidencia de cobro adicional
+// sobre el precio del plan; nunca se debe erosionar el valor contratado.
+const obtenerTotalBaseReserva = (reserva: ReservaLite, movimientos: ReservaAdicional[]) => {
+  const cantidad = Math.max(1, Number(reserva.cantidad_personas || 1));
+  const totalActual = Number(reserva.valor_total || 0);
+  const precioPlan = Number(reserva.precio_plan || 0);
+  const precioUnitario = Number(reserva.precio_unitario || 0);
+  const referenciaBase = precioPlan > 0 ? precioPlan * cantidad : precioUnitario * cantidad;
+  const impactoGuardado = movimientos.reduce((total, item) => total + Number(item.impacto_total || 0), 0);
+  const impactoCobrado = Math.min(Math.max(0, impactoGuardado), Math.max(0, totalActual - referenciaBase));
+  return totalActual - impactoCobrado;
+};
 const todayLocal = () => {
   const now = new Date();
   const year = now.getFullYear();
@@ -425,7 +440,7 @@ export default function ReservasApprovalGuard() {
     const totalOriginal = Number(selected.valor_total || 0);
     const unitarioOriginal = Number(selected.precio_unitario || (totalOriginal > 0 ? totalOriginal / cantidad : 0));
     const impactoOriginal = reservaAdicionalesOriginales.reduce((total, item) => total + Number(item.impacto_total || 0), 0);
-    const totalBaseOriginal = totalOriginal - impactoOriginal;
+    const totalBaseOriginal = obtenerTotalBaseReserva(selected, reservaAdicionalesOriginales);
 
     const movimientosAdicionales: ReservaAdicionalInput[] = adicionalesDelPlan.flatMap<ReservaAdicionalInput>((item) => {
       const max = maxCantidadPlanAdicional(item, cantidad);
@@ -723,7 +738,7 @@ export default function ReservasApprovalGuard() {
 
   const cantidadSeleccionada = Math.max(1, Number(selected?.cantidad_personas || 1));
   const impactoOriginalVista = reservaAdicionalesOriginales.reduce((total, item) => total + Number(item.impacto_total || 0), 0);
-  const totalBaseOriginalVista = Number(selected?.valor_total || 0) - impactoOriginalVista;
+  const totalBaseOriginalVista = selected ? obtenerTotalBaseReserva(selected, reservaAdicionalesOriginales) : 0;
   const impactoAdicionalesVista = adicionalesDelPlan.reduce((total, item) => {
     const quantity = item.modalidad === "opcional" && !incluirAdicionales
       ? 0
