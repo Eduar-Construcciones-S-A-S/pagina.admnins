@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { CircleDollarSign, ClipboardList, CreditCard, Gift, Plus, Trash2, UserRound, Utensils } from "lucide-react";
 import { getAdicionales, type Adicional, type ReservaAdicionalInput } from "../../services/adicional.service";
+import type { ManagedUser } from "../../services/adminUsers.service";
 import { desgloseEdicionReserva, impactoAdicionalesGuardados, type DetalleCompletoReserva } from "../../services/reservaDetalleCompleto.service";
 import "../../styles/reserva-expediente.css";
 
@@ -20,11 +21,17 @@ type Props = {
   onExtrasChange?: (value: ReservaAdicionalInput[]) => void;
   observacion?: string;
   onObservacionChange?: (value: string) => void;
+  guias?: ManagedUser[];
+  guiaSeleccionada?: string;
+  onGuiaChange?: (userId: string) => void;
+  refrigerio?: boolean;
+  onRefrigerioChange?: (value: boolean) => void;
 };
 
 export default function ReservaExpediente({
   detalle, loading = false, editing = false, extrasDirty = false, cantidad, precioUnitario, totalActual,
   extras, onExtrasChange, observacion, onObservacionChange,
+  guias = [], guiaSeleccionada, onGuiaChange, refrigerio, onRefrigerioChange,
 }: Props) {
   const [catalogo, setCatalogo] = useState<Adicional[]>([]);
   const [catalogoSeleccionado, setCatalogoSeleccionado] = useState("");
@@ -218,6 +225,30 @@ export default function ReservaExpediente({
         )}
       </section>
 
+      {editing && <section className="rv-xp-section">
+        <h3><UserRound size={17}/> Ajustes para el nuevo PDF</h3>
+        <div className="rv-xp-info-grid">
+          <div className="rv-xp-edit-field">
+            <label htmlFor="rv-xp-guia">Guía acompañante</label>
+            <select id="rv-xp-guia" value={guiaSeleccionada ?? String(reserva.guia_user_id ?? "")}
+              onChange={e=>onGuiaChange?.(e.target.value)}>
+              <option value="">Selecciona un guía</option>
+              {guiaSeleccionada && !guias.some(g=>g.user_id===guiaSeleccionada) &&
+                <option value={guiaSeleccionada}>{reserva.guia_username || "Guía registrado actualmente"}</option>}
+              {guias.filter(g=>g.telefono).map(g=><option key={g.user_id} value={g.user_id}>
+                {g.username} · {g.telefono}
+              </option>)}
+            </select>
+          </div>
+          <div className="rv-xp-edit-field">
+            <label>Refrigerio</label>
+            <label className="rv-xp-checkbox"><input type="checkbox"
+              checked={refrigerio ?? Boolean(reserva.refrigerio)}
+              onChange={e=>onRefrigerioChange?.(e.target.checked)}/> Incluido en la experiencia</label>
+          </div>
+        </div>
+        <p className="rv-xp-hint">El CH, los restaurantes y los pagos históricos se mantienen sin cambios automáticamente para proteger el control operativo.</p>
+      </section>}
       <section className="rv-xp-section">
         <h3><UserRound size={17}/> Observaciones de la reserva</h3>
         {editing ? <textarea className="rv-xp-notes" value={observacion || ""} onChange={e=>onObservacionChange?.(e.target.value)}
