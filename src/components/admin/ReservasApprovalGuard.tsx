@@ -439,7 +439,9 @@ export default function ReservasApprovalGuard() {
     const cantidad = Math.max(1, Number(selected.cantidad_personas || 1));
     const totalOriginal = Number(selected.valor_total || 0);
     const unitarioOriginal = Number(selected.precio_unitario || (totalOriginal > 0 ? totalOriginal / cantidad : 0));
-    const impactoOriginal = reservaAdicionalesOriginales.reduce((total, item) => total + Number(item.impacto_total || 0), 0);
+    // El snapshot histórico no garantiza que esos adicionales ya se hayan
+    // sumado al valor_total. La comparación debe hacerse contra el total
+    // efectivamente guardado, no contra el snapshot de adicionales.
     const totalBaseOriginal = obtenerTotalBaseReserva(selected, reservaAdicionalesOriginales);
 
     const movimientosAdicionales: ReservaAdicionalInput[] = adicionalesDelPlan.flatMap<ReservaAdicionalInput>((item) => {
@@ -640,7 +642,7 @@ export default function ReservasApprovalGuard() {
         guia_telefono: guiaElegido.telefono,
       };
 
-      if (ajusteMonetario || Math.abs(impactoAdicionales - impactoOriginal) > 0.01) {
+      if (ajusteMonetario || Math.abs(totalSinPlanesAdicionales - totalOriginal) > 0.01) {
         patch.valor_total = totalSinPlanesAdicionales;
         patch.precio_unitario = unitarioSinPlanesAdicionales;
         if (ajusteMonetario || crearTemporal) patch.observacion = [
@@ -825,6 +827,15 @@ export default function ReservasApprovalGuard() {
                   <span style={{ display: "block", marginTop: 3, color: "#756654", fontSize: 13 }}>
                     ${formatMoney(unitarioVista)} por persona · {cantidadSeleccionada} {cantidadSeleccionada === 1 ? "persona" : "personas"}
                   </span>
+                  {advancedOption !== "valor_total" && advancedOption !== "valor_unitario" && (
+                    <div style={{ marginTop: 8, padding: "8px 10px", borderRadius: 8, background: "#f4f8f4", color: "#35543c", fontSize: 12, lineHeight: 1.8 }}>
+                      <div>Precio del plan contratado: <strong>${formatMoney(totalBaseOriginalVista)}</strong></div>
+                      <div>Adicionales seleccionados: <strong>{impactoAdicionalesTotalVista >= 0 ? "+" : "−"}${formatMoney(Math.abs(impactoAdicionalesTotalVista))}</strong></div>
+                      {impactoPlanesAdicionalesVista > 0 && (
+                        <div>Planes adicionales: <strong>+${formatMoney(impactoPlanesAdicionalesVista)}</strong></div>
+                      )}
+                    </div>
+                  )}
                   {selected.nombre_plan && <span style={{ display: "block", marginTop: 3, color: "#756654", fontSize: 13 }}>{selected.nombre_plan}</span>}
                 </div>
                 <span style={{
