@@ -549,6 +549,18 @@ export default function ReservasAdmin() {
     return () => window.removeEventListener("checua:editar-reserva-para-pdf", handleEditForPdf);
   }, [reservas]);
 
+  // El botón de Control Operativo abre este editor en modo corrección + PDF.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const id = Number(url.searchParams.get("editar_pdf") || 0);
+    if (!id) return;
+    const reserva = reservas.find(item => Number(item.id_reserva) === id);
+    if (!reserva) return;
+    url.searchParams.delete("editar_pdf");
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+    void openEdit(reserva, true);
+  }, [reservas]);
+
   const updateNewParticipant = (i: number, f: keyof NuevoParticipante, v: string) => {
     setNewParticipants((p) => p.map((x, j) => (j === i ? { ...x, [f]: v } : x)));
     if (i === 0 && f === "telefono") {
