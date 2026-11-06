@@ -12,6 +12,7 @@ type Props = {
   detalle: DetalleCompletoReserva | null;
   loading?: boolean;
   editing?: boolean;
+  extrasDirty?: boolean;
   cantidad: number;
   precioUnitario: number;
   totalActual: number;
@@ -22,7 +23,7 @@ type Props = {
 };
 
 export default function ReservaExpediente({
-  detalle, loading = false, editing = false, cantidad, precioUnitario, totalActual,
+  detalle, loading = false, editing = false, extrasDirty = false, cantidad, precioUnitario, totalActual,
   extras, onExtrasChange, observacion, onObservacionChange,
 }: Props) {
   const [catalogo, setCatalogo] = useState<Adicional[]>([]);
@@ -48,7 +49,7 @@ export default function ReservaExpediente({
     Number(reserva.precio_unitario || precioUnitario), Number(reserva.cantidad_personas || cantidad),
     detalle.adicionales, detalle.planesAdicionales);
   const adicionalesTotal = impactoAdicionalesGuardados(filas);
-  const totalCalculado = editing
+  const totalCalculado = editing && extrasDirty
     ? separacion.base + separacion.planesExtra + adicionalesTotal
     : Number(reserva.valor_total || totalActual);
   const abono = Number(reserva.valor_abonado || 0);
@@ -106,7 +107,7 @@ export default function ReservaExpediente({
           {separacion.planesExtra > 0 && <div><span>Otros planes adicionales</span><strong>{money(separacion.planesExtra)}</strong></div>}
         </div>
         <div className="rv-xp-total">
-          <span>{editing ? "Total estimado después de guardar" : "Total actual de la reserva"}</span>
+          <span>{editing && extrasDirty ? "Total estimado después de guardar" : "Total actual de la reserva"}</span>
           <strong>{money(totalCalculado)}</strong>
         </div>
         {editing && detalle.adicionales.length > 0 && separacion.adicionalesCobrados < separacion.adicionalesHistoricos &&
