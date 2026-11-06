@@ -218,10 +218,14 @@ export default function ReservaExpediente({
           <div><span>Restaurante de almuerzo adicional</span><b>{txt(reserva.restaurante_almuerzo_adicional)}</b></div>
           <div><span>Refrigerio</span><b>{reserva.refrigerio ? "Incluido" : "No incluido"}</b></div>
           <div><span>Estado operativo</span><b>{txt(reserva.estado_operativo)}</b></div>
+          <div><span>Referencia del abono</span><b>{txt(reserva.referencia_pago_abono)}</b></div>
+          <div><span>Medio de pago (abono)</span><b>{txt(reserva.metodo_pago_abono)}</b></div>
+          <div><span>Medio de pago (saldo)</span><b>{txt(reserva.metodo_pago_saldo)}</b></div>
+          <div><span>Observación operativa</span><b>{txt(reserva.motivo_estado_operativo)}</b></div>
           <div><span>Aprobó</span><b>{txt(reserva.aprobado_por_username)}</b></div>
         </div>
         {Array.isArray(reserva.seleccion_almuerzos) && reserva.seleccion_almuerzos.length > 0 && (
-          <div className="rv-xp-lunch"><Utensils size={15}/> Selección de almuerzos: {reserva.seleccion_almuerzos.map((x: any, i: number)=>"Persona "+(x.numero??i+1)+": "+txt(x.id_menu)).join(" · ")}</div>
+          <div className="rv-xp-lunch"><Utensils size={15}/> Selección de almuerzos: {reserva.seleccion_almuerzos.map((x: any, i: number)=>"Persona "+(x.numero??i+1)+": "+(detalle.nombresMenu[Number(x.id_menu)] || (x.id_menu ? "Menú #" + x.id_menu : "Sin plato asignado"))).join(" · ")}</div>
         )}
       </section>
 
