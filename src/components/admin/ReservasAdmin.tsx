@@ -39,6 +39,7 @@ import {
   type DetalleCompletoReserva,
 } from "../../services/reservaDetalleCompleto.service";
 import { replaceReservaAdicionales, type ReservaAdicionalInput } from "../../services/adicional.service";
+import { listAvailableGuides, type ManagedUser } from "../../services/adminUsers.service";
 import LargeGroupExcelImport, { type ImportedGroupParticipant } from "./LargeGroupExcelImport";
 import "../../styles/reservas.css";
 
@@ -218,6 +219,9 @@ export default function ReservasAdmin() {
   const [extrasDirty, setExtrasDirty] = useState(false);
   const [observacionEdit, setObservacionEdit] = useState("");
   const [pdfAlGuardar, setPdfAlGuardar] = useState(false);
+  const [guiasPdf, setGuiasPdf] = useState<ManagedUser[]>([]);
+  const [guiaPdfId, setGuiaPdfId] = useState("");
+  const [refrigerioPdf, setRefrigerioPdf] = useState(false);
   const [participantes, setParticipantes] = useState<Participante[]>([]);
   const [loadingParticipantes, setLoadingParticipantes] = useState(false);
   const [approvalTarget, setApprovalTarget] = useState<Reserva | null>(null);
@@ -422,6 +426,9 @@ export default function ReservasAdmin() {
     setExtrasDirty(false);
     setObservacionEdit(String(r.observacion ?? ""));
     setPdfAlGuardar(solicitarPdf);
+    setGuiasPdf([]);
+    void listAvailableGuides().then(setGuiasPdf)
+      .catch(error=>console.warn("No se pudieron cargar guías para la edición",error));
     const large = Number(r.cantidad_personas ?? 0) > 30;
     setEditing(r);
     setIsLargeGroup(large);
@@ -463,6 +470,8 @@ export default function ReservasAdmin() {
       setDetalleEditing(detalle);
       setExtrasEdit(detalle.adicionales.map(item => ({ ...item })));
       setObservacionEdit(String(detalle.reserva.observacion ?? ""));
+      setGuiaPdfId(String(detalle.reserva.guia_user_id ?? ""));
+      setRefrigerioPdf(Boolean(detalle.reserva.refrigerio));
       const mapped: NuevoParticipante[] = existentes.map((p) => ({
         id_participante: p.id_participante,
         nombre: p.nombre ?? "",
@@ -766,6 +775,13 @@ export default function ReservasAdmin() {
         };
       })();
 
+      const guiaCambio = Boolean(editing && detalleEditing &&
+        guiaPdfId !== String(detalleEditing.reserva.guia_user_id ?? ""));
+      const guiaNuevo = guiaCambio ? guiasPdf.find(g=>g.user_id===guiaPdfId) : null;
+      if (guiaCambio && (!guiaNuevo || !guiaNuevo.telefono)) {
+        throw new Error("Elige un guía válido con teléfono registrado para modificar el acompañante.");
+      }
+
       if (editing) {
         if (!clientes.some((c) => c.telefono === clientPhone)) {
           await createCliente({
@@ -788,6 +804,13 @@ export default function ReservasAdmin() {
           ...precioFinal,
           ...(observacionEdit !== String(detalleEditing?.reserva.observacion ?? "")
             ? { observacion: observacionEdit.trim() || null } : {}),
+          ...(guiaNuevo ? {
+            guia_user_id: guiaNuevo.user_id,
+            guia_username: guiaNuevo.username,
+            guia_telefono: guiaNuevo.telefono,
+          } : {}),
+          ...(detalleEditing && refrigerioPdf !== Boolean(detalleEditing.reserva.refrigerio)
+            ? { refrigerio: refrigerioPdf } : {}),
         });
 
         if (extrasDirty) {
@@ -1468,7 +1491,9 @@ export default function ReservasAdmin() {
                 precioUnitario={Number(editing.precio_unitario || 0)}
                 totalActual={Number(editing.valor_total || 0)} extras={extrasEdit}
                 onExtrasChange={(items)=>{setExtrasEdit(items);setExtrasDirty(true);}}
-                observacion={observacionEdit} onObservacionChange={setObservacionEdit}/>}
+                observacion={observacionEdit} onObservacionChange={setObservacionEdit}
+                guias={guiasPdf} guiaSeleccionada={guiaPdfId} onGuiaChange={setGuiaPdfId}
+                refrigerio={refrigerioPdf} onRefrigerioChange={setRefrigerioPdf}/>}
               {renderParticipantsForm()}
             </div>
             <div className="rv-modal-footer">
