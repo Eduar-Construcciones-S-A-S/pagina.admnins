@@ -32,6 +32,13 @@ import {
 } from "lucide-react";
 import { calcularPrecioPlan, calcularTotalPlan } from "../../services/planTarifa.service";
 import ReservationApprovalModal from "../common/ReservationApprovalModal";
+import ReservaExpediente from "./ReservaExpediente";
+import { rehacerYReenviarPdfReserva } from "../../services/reservaPdf.service";
+import {
+  getDetalleCompletoReserva, desgloseEdicionReserva, impactoAdicionalesGuardados,
+  type DetalleCompletoReserva,
+} from "../../services/reservaDetalleCompleto.service";
+import { replaceReservaAdicionales, type ReservaAdicionalInput } from "../../services/adicional.service";
 import LargeGroupExcelImport, { type ImportedGroupParticipant } from "./LargeGroupExcelImport";
 import "../../styles/reservas.css";
 
@@ -200,6 +207,14 @@ export default function ReservasAdmin() {
   const [loadingBuggyPricing, setLoadingBuggyPricing] = useState(false);
 
   const [viewing, setViewing] = useState<Reserva | null>(null);
+  const [detalleViewing, setDetalleViewing] = useState<DetalleCompletoReserva | null>(null);
+  const [cargandoDetalleViewing, setCargandoDetalleViewing] = useState(false);
+  const [detalleEditing, setDetalleEditing] = useState<DetalleCompletoReserva | null>(null);
+  const [cargandoDetalleEditing, setCargandoDetalleEditing] = useState(false);
+  const [extrasEdit, setExtrasEdit] = useState<ReservaAdicionalInput[]>([]);
+  const [extrasDirty, setExtrasDirty] = useState(false);
+  const [observacionEdit, setObservacionEdit] = useState("");
+  const [pdfAlGuardar, setPdfAlGuardar] = useState(false);
   const [participantes, setParticipantes] = useState<Participante[]>([]);
   const [loadingParticipantes, setLoadingParticipantes] = useState(false);
   const [approvalTarget, setApprovalTarget] = useState<Reserva | null>(null);
@@ -379,6 +394,11 @@ export default function ReservasAdmin() {
 
   const openCreate = () => {
     setEditing(null);
+    setDetalleEditing(null);
+    setExtrasEdit([]);
+    setExtrasDirty(false);
+    setPdfAlGuardar(false);
+    setObservacionEdit("");
     setIsLargeGroup(false);
     setHasFullGroupList(false);
     setGroupImportFile("");
@@ -392,7 +412,13 @@ export default function ReservasAdmin() {
     setShowForm(true);
   };
 
-  const openEdit = async (r: Reserva) => {
+  const openEdit = async (r: Reserva, solicitarPdf = false) => {
+    setDetalleEditing(null);
+    setCargandoDetalleEditing(true);
+    setExtrasEdit([]);
+    setExtrasDirty(false);
+    setObservacionEdit(String(r.observacion ?? ""));
+    setPdfAlGuardar(solicitarPdf);
     const large = Number(r.cantidad_personas ?? 0) > 30;
     setEditing(r);
     setIsLargeGroup(large);
@@ -427,7 +453,13 @@ export default function ReservasAdmin() {
     setLoadingEditParticipants(true);
 
     try {
-      const existentes: Participante[] = await getParticipantesPorReserva(r.id_reserva);
+      const [existentes, detalle] = await Promise.all([
+        getParticipantesPorReserva(r.id_reserva),
+        getDetalleCompletoReserva(r.id_reserva),
+      ]);
+      setDetalleEditing(detalle);
+      setExtrasEdit(detalle.adicionales.map(item => ({ ...item })));
+      setObservacionEdit(String(detalle.reserva.observacion ?? ""));
       const mapped: NuevoParticipante[] = existentes.map((p) => ({
         id_participante: p.id_participante,
         nombre: p.nombre ?? "",
@@ -465,21 +497,44 @@ export default function ReservasAdmin() {
       );
     } finally {
       setLoadingEditParticipants(false);
+      setCargandoDetalleEditing(false);
     }
   };
 
   const openView = async (r: Reserva) => {
     setViewing(r);
+    setDetalleViewing(null);
     setParticipantes([]);
     setLoadingParticipantes(true);
+    setCargandoDetalleViewing(true);
     try {
-      setParticipantes(await getParticipantesPorReserva(r.id_reserva));
+      const [parts, detalle] = await Promise.all([
+        getParticipantesPorReserva(r.id_reserva),
+        getDetalleCompletoReserva(r.id_reserva),
+      ]);
+      setParticipantes(parts);
+      setDetalleViewing(detalle);
     } catch (e) {
-      console.error(e);
+      console.error("No se pudo cargar el expediente completo de la reserva", e);
     } finally {
       setLoadingParticipantes(false);
+      setCargandoDetalleViewing(false);
     }
   };
+
+  // El botón externo «Editar / rehacer PDF» abre este mismo editor.
+  useEffect(() => {
+    const handleEditForPdf = (event: Event) => {
+      const id = Number((event as CustomEvent<{ idReserva: number }>).detail?.idReserva);
+      const reserva = reservas.find(item => Number(item.id_reserva) === id);
+      if (reserva) {
+        setViewing(null);
+        void openEdit(reserva, true);
+      }
+    };
+    window.addEventListener("checua:editar-reserva-para-pdf", handleEditForPdf);
+    return () => window.removeEventListener("checua:editar-reserva-para-pdf", handleEditForPdf);
+  }, [reservas]);
 
   const updateNewParticipant = (i: number, f: keyof NuevoParticipante, v: string) => {
     setNewParticipants((p) => p.map((x, j) => (j === i ? { ...x, [f]: v } : x)));
