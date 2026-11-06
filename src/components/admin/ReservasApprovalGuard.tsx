@@ -737,7 +737,6 @@ export default function ReservasApprovalGuard() {
   };
 
   const cantidadSeleccionada = Math.max(1, Number(selected?.cantidad_personas || 1));
-  const impactoOriginalVista = reservaAdicionalesOriginales.reduce((total, item) => total + Number(item.impacto_total || 0), 0);
   const totalBaseOriginalVista = selected ? obtenerTotalBaseReserva(selected, reservaAdicionalesOriginales) : 0;
   const impactoAdicionalesVista = adicionalesDelPlan.reduce((total, item) => {
     const quantity = item.modalidad === "opcional" && !incluirAdicionales
