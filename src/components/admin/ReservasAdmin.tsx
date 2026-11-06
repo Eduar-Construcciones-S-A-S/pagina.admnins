@@ -101,7 +101,7 @@ type NuevoParticipante = {
   numero_documento: string;
   correo: string;
   telefono: string;
-  tipo_almuerzo: string;
+  tipo_almuerzo?: string;
 };
 
 const emptyParticipant = (): NuevoParticipante => ({
@@ -641,7 +641,7 @@ export default function ReservasAdmin() {
     tipo_documento: p.tipo_documento || null,
     numero_documento: p.numero_documento.trim() || null,
     correo: p.correo.trim() || null,
-    tipo_almuerzo: p.tipo_almuerzo.trim() || null,
+    tipo_almuerzo: p.tipo_almuerzo?.trim() || null,
   });
 
   const handleSave = async (reenviarPdf = false) => {
@@ -1071,7 +1071,7 @@ export default function ReservasAdmin() {
               </div>
               {editing && <div className="pt-form-group" style={{ marginTop: 10 }}>
                 <label>Tipo de almuerzo registrado</label>
-                <input value={p.tipo_almuerzo} placeholder="Opcional · almuerzo del participante"
+                <input value={p.tipo_almuerzo ?? ""} placeholder="Opcional · almuerzo del participante"
                   onChange={(e) => updateNewParticipant(index, "tipo_almuerzo", e.target.value)}/>
               </div>}
             </div>
