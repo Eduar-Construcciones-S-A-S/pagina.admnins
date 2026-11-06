@@ -9,6 +9,7 @@ export type DetalleCompletoReserva = {
   planesAdicionales: ReservaPlanAdicional[];
   pagos: ReservaPago[];
   codigoOperativo: string | null;
+  nombresMenu: Record<number, string>;
 };
 
 // Es la misma información persistida que lee el flujo de confirmaciones:
@@ -30,7 +31,19 @@ export async function getDetalleCompletoReserva(idReserva: number): Promise<Deta
     if (error) console.warn("No se pudo obtener el código operativo", error);
     codigoOperativo = data?.codigo_ch ?? null;
   }
-  return { reserva, adicionales, planesAdicionales, pagos, codigoOperativo };
+  const menuIds = Array.from(new Set([
+    ...(Array.isArray(reserva.seleccion_almuerzos) ? reserva.seleccion_almuerzos : [])
+      .map((item: any) => Number(item.id_menu)),
+    Number(reserva.id_menu_almuerzo_adicional),
+  ].filter(id => Number.isFinite(id) && id > 0)));
+  let nombresMenu: Record<number, string> = {};
+  if (menuIds.length) {
+    const { data, error } = await supabase.from("restaurante_menu")
+      .select("id_menu,nombre_plato").in("id_menu", menuIds);
+    if (error) console.warn("No se pudieron recuperar los nombres de los platos", error);
+    else nombresMenu = Object.fromEntries((data ?? []).map(row => [Number(row.id_menu), String(row.nombre_plato)]));
+  }
+  return { reserva, adicionales, planesAdicionales, pagos, codigoOperativo, nombresMenu };
 }
 
 export function impactoAdicionalesGuardados(adicionales: Pick<ReservaAdicionalInput, "impacto_total">[]) {
