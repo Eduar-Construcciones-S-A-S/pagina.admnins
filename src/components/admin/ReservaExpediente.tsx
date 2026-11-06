@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CalendarDays, CircleDollarSign, ClipboardList, CreditCard, Gift, Plus, Trash2, UserRound, Utensils, Wallet } from "lucide-react";
+import { CircleDollarSign, ClipboardList, CreditCard, Gift, Plus, Trash2, UserRound, Utensils } from "lucide-react";
 import { getAdicionales, type Adicional, type ReservaAdicionalInput } from "../../services/adicional.service";
 import { desgloseEdicionReserva, impactoAdicionalesGuardados, type DetalleCompletoReserva } from "../../services/reservaDetalleCompleto.service";
 import "../../styles/reserva-expediente.css";
