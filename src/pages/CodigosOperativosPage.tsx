@@ -189,7 +189,7 @@ export default function CodigosOperativosPage() {
               </label>
               <label><span>Número (3 dígitos)</span>
                 <input value={form.codigo_ch.slice(2)} maxLength={3} inputMode="numeric"
-                  onChange={(e) => setForm({...form, codigo_ch:form.codigo_ch.slice(0,2) + e.target.value.replace(/\\D/g, "").slice(0,3)})}
+                  onChange={(e) => setForm({...form, codigo_ch:form.codigo_ch.slice(0,2) + e.target.value.replace(/\D/g, "").slice(0,3)})}
                   placeholder="001" aria-label="Número del código, tres dígitos"/>
               </label>
               <label><span>Descripción</span><input value={form.descripcion} onChange={(e) => setForm({...form, descripcion:e.target.value})} placeholder="Ej. Promoción senderismo y mina"/></label>
