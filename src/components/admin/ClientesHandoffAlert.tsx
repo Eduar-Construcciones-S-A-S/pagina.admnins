@@ -13,6 +13,7 @@ export interface ClienteHandoffPendiente {
 interface Props {
   pendientes: ClienteHandoffPendiente[];
   onShowAll: () => void;
+  onAtender: (telefono: string) => void;
 }
 
 const MAX_VISIBLES = 5;
@@ -31,7 +32,7 @@ function fechaLegible(value: string | null) {
 }
 
 /** Solo los chats derivados desde el bot generan estas alertas. */
-export default function ClientesHandoffAlert({ pendientes, onShowAll }: Props) {
+export default function ClientesHandoffAlert({ pendientes, onShowAll, onAtender }: Props) {
   const [permission, setPermission] = useState<NotificationPermission | "unsupported">(getPermission);
   const [notificationError, setNotificationError] = useState("");
 
@@ -50,13 +51,16 @@ export default function ClientesHandoffAlert({ pendientes, onShowAll }: Props) {
         notif.onclick = () => {
           window.focus();
           notif.close();
-          if (cliente.whatsappUrl) window.open(cliente.whatsappUrl, "_blank", "noopener,noreferrer");
+          if (cliente.whatsappUrl) {
+            window.open(cliente.whatsappUrl, "_blank", "noopener,noreferrer");
+            onAtender(cliente.telefono);
+          }
         };
       } catch (error) {
         console.warn("No fue posible presentar una notificación de atención", error);
       }
     }
-  }, [pendientes, permission]);
+  }, [pendientes, permission, onAtender]);
 
   const activarNotificaciones = async () => {
     if (typeof Notification === "undefined") return;
@@ -108,7 +112,9 @@ export default function ClientesHandoffAlert({ pendientes, onShowAll }: Props) {
               <small>Última interacción: {fechaLegible(cliente.ultimaInteraccion)}</small>
             </div>
             {cliente.whatsappUrl ? (
-              <a className="cl-attend-btn" href={cliente.whatsappUrl} target="_blank" rel="noopener noreferrer" aria-label={"Atender en WhatsApp a " + cliente.nombre}>
+              <a className="cl-attend-btn" href={cliente.whatsappUrl} target="_blank" rel="noopener noreferrer"
+                onClick={() => onAtender(cliente.telefono)}
+                aria-label={"Atender en WhatsApp a " + cliente.nombre}>
                 <MessageCircle size={16}/> Atender <ExternalLink size={14}/>
               </a>
             ) : (

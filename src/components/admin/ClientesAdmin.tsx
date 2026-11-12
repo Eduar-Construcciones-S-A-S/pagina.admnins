@@ -36,6 +36,7 @@ interface Cliente {
   estado_atencion: EstadoAtencion;
   ultima_interaccion_cliente?: string | null;
   fecha_estado_atencion?: string | null;
+  alerta_atencion_pendiente: boolean;
   identidad?: { username: string | null; nombre_perfil: string | null; bsuid: string | null } | null;
   etapaconversacion?: EtapaConversacionValue | null;
   id_plan?: number | null;
@@ -71,11 +72,13 @@ export default function ClientesAdmin() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [planes, setPlanes] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
+  // Ocultar el aviso inmediatamente, mientras se confirma el cambio en Supabase.
+  const [ocultadasTemporal, setOcultadasTemporal] = useState<Record<string, string>>({});
 
   // Filtros
   const [search, setSearch] = useState("");
   const [etapaFilter, setEtapaFilter] = useState("todas");
-  const [atencionFilter, setAtencionFilter] = useState<"todas" | "humana" | "bot" | "desde_bot">("todas");
+  const [atencionFilter, setAtencionFilter] = useState<"todas" | "humana" | "bot" | "desde_bot" | "pendiente">("todas");
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
 
@@ -243,6 +246,39 @@ export default function ClientesAdmin() {
     || c.identidad?.username?.trim()
     || c.telefono;
 
+  const necesitaAtencion = (c: Cliente) =>
+    c.estado_atencion === "atencion_humana_desde_bot"
+    && c.alerta_atencion_pendiente === true
+    && ocultadasTemporal[c.telefono] !== (c.fecha_estado_atencion ?? "sin-fecha");
+
+  // Abrir WhatsApp no cambia el estado de atención, solo reconoce la alerta.
+  const marcarAtencionIniciada = (telefono: string) => {
+    const actual = clientes.find(c => c.telefono === telefono);
+    if (!actual || !necesitaAtencion(actual)) return;
+    const identificador = actual.fecha_estado_atencion ?? "sin-fecha";
+    setOcultadasTemporal(prev => ({ ...prev, [telefono]: identificador }));
+    void (async () => {
+      try {
+        const actualizado = await updateCliente(telefono, { alerta_atencion_pendiente: false });
+        if (actualizado.alerta_atencion_pendiente !== false) {
+          throw new Error("La confirmación no quedó registrada.");
+        }
+        setClientes(prev => prev.map(c =>
+          c.telefono === telefono ? { ...c, alerta_atencion_pendiente: false } : c
+        ));
+      } catch (error) {
+        console.error("No se pudo registrar la atención del cliente", error);
+        setOcultadasTemporal(prev => {
+          if (prev[telefono] !== identificador) return prev;
+          const siguiente = { ...prev };
+          delete siguiente[telefono];
+          return siguiente;
+        });
+        window.alert("Se abrió WhatsApp, pero no se pudo quitar la alerta. Inténtalo de nuevo.");
+      }
+    })();
+  };
+
   /* ── Filtrado y paginación ── */
   const filtered = clientes.filter((c) => {
     const q = search.toLowerCase();
@@ -255,6 +291,7 @@ export default function ClientesAdmin() {
       atencionFilter === "todas" ? true :
       atencionFilter === "humana" ? c.estado_atencion === "atencion_humana" :
       atencionFilter === "bot" ? c.estado_atencion === "atencion_bot" :
+      atencionFilter === "pendiente" ? necesitaAtencion(c) :
       c.estado_atencion === "atencion_humana_desde_bot";
     return matchSearch && matchEtapa && matchAtencion;
   });
@@ -273,7 +310,7 @@ export default function ClientesAdmin() {
   const desdeBot = clientes.filter((c) => c.estado_atencion === "atencion_humana_desde_bot").length;
 
   const pendientesAtencion: ClienteHandoffPendiente[] = clientes
-    .filter((c) => c.estado_atencion === "atencion_humana_desde_bot")
+    .filter(necesitaAtencion)
     .map((c) => ({
       telefono: c.telefono,
       nombre: displayName(c),
@@ -288,7 +325,7 @@ export default function ClientesAdmin() {
   const verPendientes = () => {
     setSearch("");
     setEtapaFilter("todas");
-    setAtencionFilter("desde_bot");
+    setAtencionFilter("pendiente");
     setPage(1);
     document.getElementById("clientes-filtros")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
@@ -319,9 +356,10 @@ export default function ClientesAdmin() {
     return (
       <a className={compacto ? "cl-attend-btn cl-attend-btn-compact" : "cl-attend-btn"}
         href={url} target="_blank" rel="noopener noreferrer"
+        onClick={() => marcarAtencionIniciada(c.telefono)}
         title="Abrir conversación en WhatsApp"
-        aria-label={"Atender a " + displayName(c) + " en WhatsApp"}>
-        <MessageCircle size={15}/> Atender <ExternalLink size={13}/>
+        aria-label={"Abrir WhatsApp para " + displayName(c)}>
+        <MessageCircle size={15}/> {necesitaAtencion(c) ? "Atender" : "Abrir WhatsApp"} <ExternalLink size={13}/>
       </a>
     );
   };
@@ -369,8 +407,8 @@ export default function ClientesAdmin() {
       {openMenu === c.telefono && (
         <div className="cl-menu-dropdown">
           {c.estado_atencion === "atencion_humana_desde_bot" && whatsappChatUrl(c.telefono) && (
-            <a href={whatsappChatUrl(c.telefono)!} target="_blank" rel="noopener noreferrer" onClick={() => setOpenMenu(null)}>
-              <MessageCircle size={15}/> Atender en WhatsApp
+            <a href={whatsappChatUrl(c.telefono)!} target="_blank" rel="noopener noreferrer" onClick={() => { setOpenMenu(null); marcarAtencionIniciada(c.telefono); }}>
+              <MessageCircle size={15}/> {necesitaAtencion(c) ? "Atender en WhatsApp" : "Abrir WhatsApp"}
             </a>
           )}
           <button onClick={() => openView(c)}><Eye size={15} /> Ver</button>
@@ -431,7 +469,7 @@ export default function ClientesAdmin() {
         </div>
       </div>
 
-      <ClientesHandoffAlert pendientes={pendientesAtencion} onShowAll={verPendientes} />
+      <ClientesHandoffAlert pendientes={pendientesAtencion} onShowAll={verPendientes} onAtender={marcarAtencionIniciada} />
 
       {/* Filter bar */}
       <div className="cl-filter-bar" id="clientes-filtros">
@@ -472,6 +510,7 @@ export default function ClientesAdmin() {
             <option value="humana">Atención humana</option>
             <option value="bot">Atención bot</option>
             <option value="desde_bot">Atención humana desde bot</option>
+            <option value="pendiente">Necesita atención</option>
           </select>
         </div>
 
@@ -515,7 +554,7 @@ export default function ClientesAdmin() {
                 <td><strong>{displayName(c)}</strong><div className="cl-phone"><Phone size={13} /> {c.telefono}</div></td>
                 <td>
                   <AtencionBadge estado={c.estado_atencion} />
-                  {c.estado_atencion === "atencion_humana_desde_bot" && (
+                  {necesitaAtencion(c) && (
                     <span className="cl-needs-attention"><AlertTriangle size={12}/> Necesita atención</span>
                   )}
                 </td>
@@ -558,7 +597,7 @@ export default function ClientesAdmin() {
             </div>
             <div className="cl-card-badges">
               <AtencionBadge estado={c.estado_atencion} />
-              {c.estado_atencion === "atencion_humana_desde_bot" && (
+              {necesitaAtencion(c) && (
                 <span className="cl-needs-attention"><AlertTriangle size={12}/> Necesita atención</span>
               )}
               <EtapaBadge etapa={c.etapaconversacion} />
