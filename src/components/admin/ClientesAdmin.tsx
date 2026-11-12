@@ -9,11 +9,14 @@ import {
 import {
   Plus, Eye, Pencil, Trash2, Search, X,
   ChevronLeft, ChevronRight, Phone, Users, Headphones, Bot,
-  MessageSquare, MoreVertical, Package,
+  MessageSquare, MoreVertical, Package, AlertTriangle, MessageCircle, ExternalLink,
 } from "lucide-react";
 import "../../styles/clientes.css";
 import { ETAPAS, getEtapaInfo } from "../../lib/etapas";
 import type { EtapaConversacionValue } from "../../lib/etapas";
+import { supabase } from "../../lib/supabase";
+import ClientesHandoffAlert from "./ClientesHandoffAlert";
+import type { ClienteHandoffPendiente } from "./ClientesHandoffAlert";
 
 /* ── Tipos ─────────────────────────────────── */
 type EstadoAtencion = "atencion_humana" | "atencion_bot" | "atencion_humana_desde_bot";
@@ -32,6 +35,7 @@ interface Cliente {
   bot_habilitado: boolean;
   estado_atencion: EstadoAtencion;
   ultima_interaccion_cliente?: string | null;
+  fecha_estado_atencion?: string | null;
   identidad?: { username: string | null; nombre_perfil: string | null; bsuid: string | null } | null;
   etapaconversacion?: EtapaConversacionValue | null;
   id_plan?: number | null;
@@ -52,6 +56,14 @@ const emptyForm = {
 };
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50];
+
+// wa.me abre el chat existente por número; no envía mensajes automáticamente.
+function whatsappChatUrl(telefono: string): string | null {
+  let digitos = String(telefono ?? "").replace(/\D/g, "");
+  if (digitos.length === 10 && digitos.startsWith("3")) digitos = "57" + digitos;
+  if (!/^[1-9]\d{10,14}$/.test(digitos)) return null;
+  return "https://wa.me/" + digitos;
+}
 
 
 /* ── Componente ────────────────────────────── */
@@ -94,7 +106,40 @@ export default function ClientesAdmin() {
     }
   };
 
-  useEffect(() => { fetchClientes(); }, []);
+  useEffect(() => { void fetchClientes(); }, []);
+
+  // Refresca la bandeja ante nuevas derivaciones. El sondeo cubre instalaciones
+  // donde los eventos Realtime de la tabla cliente no están habilitados.
+  useEffect(() => {
+    let activo = true;
+    let consultando = false;
+    const refrescar = async () => {
+      if (!activo || consultando) return;
+      consultando = true;
+      try {
+        const data = await getClientes();
+        if (activo) setClientes(data);
+      } catch (error) {
+        console.error("No se pudo actualizar la lista de clientes", error);
+      } finally {
+        consultando = false;
+      }
+    };
+    const timer = window.setInterval(() => void refrescar(), 60_000);
+    const channel = supabase?.channel("clientes-derivaciones-bot")
+      .on("postgres_changes", { event: "*", schema: "public", table: "cliente" }, () => void refrescar())
+      .subscribe();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refrescar();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      activo = false;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+      if (channel && supabase) void supabase.removeChannel(channel);
+    };
+  }, []);
 
   useEffect(() => {
     if (openMenu == null) return;
@@ -227,6 +272,27 @@ export default function ClientesAdmin() {
   const soloBot = clientes.filter((c) => c.estado_atencion === "atencion_bot").length;
   const desdeBot = clientes.filter((c) => c.estado_atencion === "atencion_humana_desde_bot").length;
 
+  const pendientesAtencion: ClienteHandoffPendiente[] = clientes
+    .filter((c) => c.estado_atencion === "atencion_humana_desde_bot")
+    .map((c) => ({
+      telefono: c.telefono,
+      nombre: displayName(c),
+      plan: planes.find((p) => p.id_plan === c.id_plan)?.nombre_plan ?? null,
+      fechaEstado: c.fecha_estado_atencion ?? null,
+      ultimaInteraccion: c.ultima_interaccion_cliente ?? null,
+      whatsappUrl: whatsappChatUrl(c.telefono),
+    }))
+    .sort((a, b) => Date.parse(b.fechaEstado || b.ultimaInteraccion || "") -
+                    Date.parse(a.fechaEstado || a.ultimaInteraccion || ""));
+
+  const verPendientes = () => {
+    setSearch("");
+    setEtapaFilter("todas");
+    setAtencionFilter("desde_bot");
+    setPage(1);
+    document.getElementById("clientes-filtros")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   /* ── Sub-componentes ── */
   const nombrePlan = (id_plan?: number | null) => {
     if (id_plan == null) return null;
@@ -246,6 +312,20 @@ export default function ClientesAdmin() {
         ? <span className="cl-badge cl-badge-derivada"><Headphones size={12} /> {ESTADOS_ATENCION[estado]}</span>
         : <span className="cl-badge cl-badge-humana"><Headphones size={12} /> {ESTADOS_ATENCION[estado]}</span>;
 
+  const AtenderLink = ({ c, compacto = false }: { c: Cliente; compacto?: boolean }) => {
+    if (c.estado_atencion !== "atencion_humana_desde_bot") return null;
+    const url = whatsappChatUrl(c.telefono);
+    if (!url) return <span className="cl-handoff-invalid">Número no válido</span>;
+    return (
+      <a className={compacto ? "cl-attend-btn cl-attend-btn-compact" : "cl-attend-btn"}
+        href={url} target="_blank" rel="noopener noreferrer"
+        title="Abrir conversación en WhatsApp"
+        aria-label={"Atender a " + displayName(c) + " en WhatsApp"}>
+        <MessageCircle size={15}/> Atender <ExternalLink size={13}/>
+      </a>
+    );
+  };
+
   const EtapaBadge = ({ etapa }: { etapa?: string | null }) => {
     if (!etapa) return <span className="rv-null">—</span>;
     const info = getEtapaInfo(etapa);
@@ -261,6 +341,7 @@ export default function ClientesAdmin() {
 
   const ActionButtons = ({ c }: { c: Cliente }) => (
     <div className="action-buttons">
+      {c.estado_atencion === "atencion_humana_desde_bot" && <AtenderLink c={c} compacto />}
       <button className="action-btn action-ver" onClick={() => openView(c)}>
         <Eye size={14} /> Ver
       </button>
@@ -287,6 +368,11 @@ export default function ClientesAdmin() {
       </button>
       {openMenu === c.telefono && (
         <div className="cl-menu-dropdown">
+          {c.estado_atencion === "atencion_humana_desde_bot" && whatsappChatUrl(c.telefono) && (
+            <a href={whatsappChatUrl(c.telefono)!} target="_blank" rel="noopener noreferrer" onClick={() => setOpenMenu(null)}>
+              <MessageCircle size={15}/> Atender en WhatsApp
+            </a>
+          )}
           <button onClick={() => openView(c)}><Eye size={15} /> Ver</button>
           <button onClick={() => toggleBot(c)}><Bot size={15} /> {c.estado_atencion === "atencion_bot" ? "Pasar a humana" : "Pasar a bot"}</button>
           <button onClick={() => openEdit(c)}><Pencil size={15} /> Editar</button>
@@ -345,8 +431,10 @@ export default function ClientesAdmin() {
         </div>
       </div>
 
+      <ClientesHandoffAlert pendientes={pendientesAtencion} onShowAll={verPendientes} />
+
       {/* Filter bar */}
-      <div className="cl-filter-bar">
+      <div className="cl-filter-bar" id="clientes-filtros">
         <div className="cl-search-wrap">
           <Search size={15} className="cl-search-icon" />
           <input
@@ -425,7 +513,12 @@ export default function ClientesAdmin() {
             ) : paginated.map((c) => (
               <tr key={c.telefono}>
                 <td><strong>{displayName(c)}</strong><div className="cl-phone"><Phone size={13} /> {c.telefono}</div></td>
-                <td><AtencionBadge estado={c.estado_atencion} /></td>
+                <td>
+                  <AtencionBadge estado={c.estado_atencion} />
+                  {c.estado_atencion === "atencion_humana_desde_bot" && (
+                    <span className="cl-needs-attention"><AlertTriangle size={12}/> Necesita atención</span>
+                  )}
+                </td>
                 <td><EtapaBadge etapa={c.etapaconversacion} /></td>
                 <td><PlanBadge id_plan={c.id_plan} /></td>
                 <td><ActionButtons c={c} /></td>
@@ -465,9 +558,15 @@ export default function ClientesAdmin() {
             </div>
             <div className="cl-card-badges">
               <AtencionBadge estado={c.estado_atencion} />
+              {c.estado_atencion === "atencion_humana_desde_bot" && (
+                <span className="cl-needs-attention"><AlertTriangle size={12}/> Necesita atención</span>
+              )}
               <EtapaBadge etapa={c.etapaconversacion} />
               <PlanBadge id_plan={c.id_plan} />
             </div>
+            {c.estado_atencion === "atencion_humana_desde_bot" && (
+              <div className="cl-card-attend"><AtenderLink c={c}/></div>
+            )}
           </div>
         ))}
 
