@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import {
   getClientes,
   createCliente,
@@ -93,7 +93,6 @@ export default function ClientesAdmin() {
 
   // Menú acciones (móvil)
   const [openMenu, setOpenMenu] = useState<string | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
 
   /* ── Fetch ── */
   const fetchClientes = async () => {
@@ -147,7 +146,7 @@ export default function ClientesAdmin() {
   useEffect(() => {
     if (openMenu == null) return;
     const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+      if (!(e.target as Element).closest(".cl-card-menu")) {
         setOpenMenu(null);
       }
     };
@@ -377,44 +376,44 @@ export default function ClientesAdmin() {
     );
   };
 
+  // Mostramos las acciones frecuentes sin ocupar toda la fila.
+  // El menú agrupa el mantenimiento (bot, edición y eliminación).
   const ActionButtons = ({ c }: { c: Cliente }) => (
-    <div className="action-buttons">
+    <div className="cl-row-actions">
       {c.estado_atencion === "atencion_humana_desde_bot" && <AtenderLink c={c} compacto />}
-      <button className="action-btn action-ver" onClick={() => openView(c)}>
+      <button type="button" className="action-btn action-ver" onClick={() => openView(c)}>
         <Eye size={14} /> Ver
       </button>
-      <button className="action-btn action-editar" onClick={() => toggleBot(c)}>
-        <Bot size={14} /> {c.estado_atencion === "atencion_bot" ? "Pasar a humana" : "Pasar a bot"}
-      </button>
-      <button className="action-btn action-editar" onClick={() => openEdit(c)}>
-        <Pencil size={14} /> Editar
-      </button>
-      <button className="action-btn action-eliminar" onClick={() => handleDelete(c)}>
-        <Trash2 size={14} /> Eliminar
-      </button>
+      <ActionMenu c={c} soloGestion />
     </div>
   );
 
-  const ActionMenu = ({ c }: { c: Cliente }) => (
-    <div className="cl-card-menu" ref={openMenu === c.telefono ? menuRef : undefined}>
-      <button
+  const ActionMenu = ({ c, soloGestion = false }: { c: Cliente; soloGestion?: boolean }) => (
+    <div className="cl-card-menu">
+      <button type="button"
         className="cl-menu-trigger"
         onClick={() => setOpenMenu(openMenu === c.telefono ? null : c.telefono)}
-        aria-label="Acciones"
+        aria-label={"Más acciones para " + displayName(c)}
+        aria-expanded={openMenu === c.telefono}
+        aria-haspopup="menu"
+        title="Más acciones"
       >
         <MoreVertical size={18} />
       </button>
       {openMenu === c.telefono && (
-        <div className="cl-menu-dropdown">
-          {c.estado_atencion === "atencion_humana_desde_bot" && whatsappChatUrl(c.telefono) && (
-            <a href={whatsappChatUrl(c.telefono)!} target="_blank" rel="noopener noreferrer" onClick={() => { setOpenMenu(null); marcarAtencionIniciada(c.telefono); }}>
+        <div className="cl-menu-dropdown" role="menu">
+          {!soloGestion && c.estado_atencion === "atencion_humana_desde_bot" && whatsappChatUrl(c.telefono) && (
+            <a href={whatsappChatUrl(c.telefono)!} target="_blank" rel="noopener noreferrer"
+              onClick={() => { setOpenMenu(null); marcarAtencionIniciada(c.telefono); }}>
               <MessageCircle size={15}/> {necesitaAtencion(c) ? "Atender en WhatsApp" : "Abrir WhatsApp"}
             </a>
           )}
-          <button onClick={() => openView(c)}><Eye size={15} /> Ver</button>
-          <button onClick={() => toggleBot(c)}><Bot size={15} /> {c.estado_atencion === "atencion_bot" ? "Pasar a humana" : "Pasar a bot"}</button>
-          <button onClick={() => openEdit(c)}><Pencil size={15} /> Editar</button>
-          <button className="cl-menu-danger" onClick={() => handleDelete(c)}>
+          {!soloGestion && <button type="button" onClick={() => openView(c)}><Eye size={15} /> Ver</button>}
+          <button type="button" onClick={() => toggleBot(c)}>
+            <Bot size={15} /> {c.estado_atencion === "atencion_bot" ? "Pasar a humana" : "Pasar a bot"}
+          </button>
+          <button type="button" onClick={() => openEdit(c)}><Pencil size={15} /> Editar</button>
+          <button type="button" className="cl-menu-danger" onClick={() => handleDelete(c)}>
             <Trash2 size={15} /> Eliminar
           </button>
         </div>
@@ -535,6 +534,13 @@ export default function ClientesAdmin() {
       {/* ── Tabla (desktop) ── */}
       <div className="cl-table-wrap cl-desktop-only">
         <table className="cl-table">
+          <colgroup>
+            <col className="cl-col-client" />
+            <col className="cl-col-attention" />
+            <col className="cl-col-stage" />
+            <col className="cl-col-plan" />
+            <col className="cl-col-actions" />
+          </colgroup>
           <thead>
             <tr>
               <th>CLIENTE / WHATSAPP</th>
@@ -551,12 +557,19 @@ export default function ClientesAdmin() {
               <tr><td colSpan={5} className="cl-empty">Sin resultados</td></tr>
             ) : paginated.map((c) => (
               <tr key={c.telefono}>
-                <td><strong>{displayName(c)}</strong><div className="cl-phone"><Phone size={13} /> {c.telefono}</div></td>
                 <td>
-                  <AtencionBadge estado={c.estado_atencion} />
+                  <div className="cl-client-cell">
+                    <strong className="cl-client-name" title={displayName(c)}>{displayName(c)}</strong>
+                    <span className="cl-phone"><Phone size={13} /> {c.telefono}</span>
+                  </div>
+                </td>
+                <td>
+                  <div className="cl-status-stack">
+                    <AtencionBadge estado={c.estado_atencion} />
                   {necesitaAtencion(c) && (
                     <span className="cl-needs-attention"><AlertTriangle size={12}/> Necesita atención</span>
                   )}
+                  </div>
                 </td>
                 <td><EtapaBadge etapa={c.etapaconversacion} /></td>
                 <td><PlanBadge id_plan={c.id_plan} /></td>
@@ -592,7 +605,10 @@ export default function ClientesAdmin() {
         ) : paginated.map((c) => (
           <div className="cl-card" key={c.telefono}>
             <div className="cl-card-top">
-              <span className="cl-card-phone"><Phone size={15} /> {displayName(c)} ({c.telefono})</span>
+              <div className="cl-card-identity">
+                <strong className="cl-card-name">{displayName(c)}</strong>
+                <span className="cl-card-number"><Phone size={13} /> {c.telefono}</span>
+              </div>
               <ActionMenu c={c} />
             </div>
             <div className="cl-card-badges">
