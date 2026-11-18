@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent } from "react";
+import { useEffect, useState, type MouseEvent as ReactMouseEvent } from "react";
 import {
   getClientes,
   createCliente,
@@ -272,7 +272,7 @@ export default function ClientesAdmin() {
     openWhatsAppChat(url);
   };
 
-  const handleWhatsAppClick = (event: MouseEvent<HTMLAnchorElement>, telefono: string, url: string) => {
+  const handleWhatsAppClick = (event: ReactMouseEvent<HTMLAnchorElement>, telefono: string, url: string) => {
     // Respetar Ctrl/Cmd, Shift y clic central, que el usuario puede usar
     // expresamente para abrir una pestaña independiente.
     if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
