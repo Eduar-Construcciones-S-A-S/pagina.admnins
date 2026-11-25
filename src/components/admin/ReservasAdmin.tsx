@@ -43,7 +43,7 @@ import { notaEditableReserva, guardarNotaReserva } from "../../utils/reservaObse
 import { listAvailableGuides, type ManagedUser } from "../../services/adminUsers.service";
 import LargeGroupExcelImport, { type ImportedGroupParticipant } from "./LargeGroupExcelImport";
 import "../../styles/reservas.css";
-import { calcularRecargoMina, RECARGO_MINA_EXTRANJERO } from "../../utils/mineForeignSurcharge";
+import { calcularRecargoMina, planIncluyeMina, RECARGO_MINA_EXTRANJERO } from "../../utils/mineForeignSurcharge";
 
 interface Reserva {
   id_reserva: number;
@@ -842,6 +842,7 @@ export default function ReservasAdmin() {
         const updatedReserva = await updateReserva(editing.id_reserva, {
           telefono_cliente: clientPhone,
           id_plan: selectedPlanId,
+          ...(selectedPlanId !== Number(editing.id_plan) ? { mina: planIncluyeMina(selectedPlan) } : {}),
           id_fecha: idFecha,
           id_hora: idHora,
           fecha_reserva: fechaReserva,
@@ -904,6 +905,7 @@ export default function ReservasAdmin() {
         const created = await createReserva({
           telefono_cliente: clientPhone,
           id_plan: selectedPlanId,
+          mina: planIncluyeMina(selectedPlan),
           id_fecha: idFecha,
           id_hora: idHora,
           fecha_reserva: fechaReserva,
