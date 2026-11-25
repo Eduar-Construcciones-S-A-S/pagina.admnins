@@ -43,6 +43,7 @@ import { notaEditableReserva, guardarNotaReserva } from "../../utils/reservaObse
 import { listAvailableGuides, type ManagedUser } from "../../services/adminUsers.service";
 import LargeGroupExcelImport, { type ImportedGroupParticipant } from "./LargeGroupExcelImport";
 import "../../styles/reservas.css";
+import { calcularRecargoMina, RECARGO_MINA_EXTRANJERO } from "../../utils/mineForeignSurcharge";
 
 interface Reserva {
   id_reserva: number;
@@ -63,6 +64,9 @@ interface Reserva {
   hora_reserva?: string | null;
   precio_unitario?: number | null;
   valor_total?: number | null;
+  recargo_mina_extranjeros?: number | null;
+  cantidad_extranjeros_mina?: number | null;
+  mina?: boolean | null;
   observacion?: string | null;
 }
 
@@ -74,6 +78,8 @@ interface PlanHora {
 interface Plan {
   id_plan: number;
   nombre_plan: string;
+  descripcion_basica?: string | null;
+  descripcion_detallada?: string | null;
   tipo_hora?: string | null;
   id_plan_padre?: number | null;
   es_grupo?: boolean | null;
@@ -260,6 +266,14 @@ export default function ReservasAdmin() {
       : null,
     [planes, selectedPlan],
   );
+
+  const vistaRecargoMina = useMemo(() => {
+    const minaExplicita = Boolean(editing?.mina && Number(editing.id_plan) === Number(formData.id_plan));
+    return calcularRecargoMina(
+      selectedPlan ? { ...selectedPlan, mina: minaExplicita } : null,
+      newParticipants.map(p => p.nacionalidad),
+    );
+  }, [editing?.id_plan, editing?.mina, selectedPlan, formData.id_plan, newParticipants]);
 
   const isBuggyPlan = useMemo(() => {
     if (!selectedPlan) return false;
@@ -787,6 +801,11 @@ export default function ReservasAdmin() {
           precio_unitario: conservarPrecioExistente ? Number(editing.precio_unitario) : Number(pricingFields.precio_unitario),
         };
       })();
+
+      // Se mantiene el suplemento ya guardado hasta que Supabase revise nacionalidades.
+      if (editing && !conservarPrecioExistente) {
+        precioFinal.valor_total += Number(editing.recargo_mina_extranjeros || 0);
+      }
 
       if (editing?.aprobado && selectedPlanId !== Number(editing.id_plan)) {
         throw new Error(
