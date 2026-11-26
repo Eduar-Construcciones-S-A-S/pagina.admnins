@@ -60,14 +60,29 @@ BEGIN
     GROUP BY a.clave_cliente
   ),
   -- Únicamente eventos de contactos cuya activación IA fue confirmada EN este rango.
-  scoped_events AS MATERIALIZED (
-    SELECT a.clave_cliente,a.creado_en,a.tipo_evento,a.estado_envio,a.detalles,
+  -- La derivación humana corta la atribución: los mensajes que lleguen
+  -- después NO suman al bot hasta una nueva respuesta IA aceptada.
+  scoped_events_raw AS MATERIALIZED (
+    SELECT a.id,a.clave_cliente,a.creado_en,a.tipo_evento,a.estado_envio,a.detalles,
       a.primera_presentacion,a.informacion_plan_enviada,a.derivado_humano,
-      a.etapa,a.respuesta_bot,a.verificacion_comercial
+      a.etapa,a.respuesta_bot,a.verificacion_comercial,
+      max(CASE WHEN a.tipo_evento='saliente' AND a.derivado_humano IS TRUE THEN a.id END)
+        OVER (PARTITION BY a.clave_cliente ORDER BY a.creado_en,a.id ROWS UNBOUNDED PRECEDING) AS last_handoff_id,
+      max(CASE WHEN a.tipo_evento='saliente' AND a.estado_envio='aceptado_ycloud'
+                AND a.detalles->>'tipo_ruta'='ia' THEN a.id END)
+        OVER (PARTITION BY a.clave_cliente ORDER BY a.creado_en,a.id ROWS UNBOUNDED PRECEDING) AS last_ai_id
     FROM public.bot_mensaje_auditoria a
     JOIN activated c ON c.clave_cliente=a.clave_cliente
     WHERE a.creado_en >= (p_from::timestamp AT TIME ZONE 'America/Bogota')
       AND a.creado_en < ((p_to+1)::timestamp AT TIME ZONE 'America/Bogota')
+  ),
+  scoped_events AS (
+    SELECT clave_cliente,creado_en,tipo_evento,estado_envio,detalles,
+      primera_presentacion,informacion_plan_enviada,derivado_humano,
+      etapa,respuesta_bot,verificacion_comercial
+    FROM scoped_events_raw
+    WHERE last_handoff_id IS NULL OR last_ai_id>last_handoff_id
+      OR (tipo_evento='saliente' AND derivado_humano IS TRUE)
   ),
   contacts AS (
     SELECT clave_cliente,
